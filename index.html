@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--green:#4CAF50;--green-light:#E8F5E9;--blue:#2196F3;--blue-light:#E3F2FD;--orange:#FF9800;--orange-light:#FFF3E0;--purple:#9C27B0;--purple-light:#F3E5F5;--red:#F44336;--gray:#757575;--gray-light:#F5F5F5;--white:#FFFFFF;--shadow:0 2px 8px rgba(0,0,0,0.1);--shadow-lg:0 4px 16px rgba(0,0,0,0.15);--radius:12px;--radius-sm:8px}
@@ -262,10 +263,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <h2>Dnešní nabídka aktivit</h2>
       <div id="dash-schedule-preview"></div>
     </div>
-    <div class="quick-actions">
+    <div class="quick-actions" id="dash-quick-actions">
       <button class="quick-action" style="background:linear-gradient(135deg,var(--green),#388E3C)" onclick="showScreen('activities')"><span class="icon">🏃</span>Zapsat aktivitu</button>
       <button class="quick-action" style="background:linear-gradient(135deg,var(--blue),#1565C0)" onclick="showScreen('km')"><span class="icon">🚶</span>Zapsat km</button>
     </div>
+    <div id="dash-program-warning" class="warning-box" style="display:none;margin:0 0 12px 0"></div>
   </div>
 
   <!-- ACTIVITIES -->
@@ -799,19 +801,33 @@ function renderDashboard() {
   document.getElementById('dash-points').textContent = getTotalPoints(child);
   const today = getToday();
   document.getElementById('dash-date').textContent = formatDate(today);
+  const active = isProgramActive(data);
+  const warnEl = document.getElementById('dash-program-warning');
+  const quickEl = document.getElementById('dash-quick-actions');
+  if (!active) {
+    const msg = today < data.settings.programStart
+      ? 'Program začíná ' + formatDate(data.settings.programStart)
+      : 'Program skončil ' + formatDate(data.settings.programEnd);
+    warnEl.innerHTML = msg;
+    warnEl.style.display = 'block';
+    quickEl.style.display = 'none';
+  } else {
+    warnEl.style.display = 'none';
+    quickEl.style.display = '';
+  }
   const rec = getTodayRecord(child);
   const list = document.getElementById('dash-today-list');
   const empty = document.getElementById('dash-today-empty');
   const items = [];
   if (rec.activity) {
-    const canRemove = isCancellable(rec.activity, data, today);
+    const canRemove = active && isCancellable(rec.activity, data, today);
     const removeBtn = canRemove
       ? '<button class="remove-btn" onclick="removeTodayActivity()" title="Odebrat">✕</button>'
       : '<span style="font-size:.7rem;color:var(--gray)">🔒</span>';
     items.push('<li><span>' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' <strong>(+' + rec.activity.points + 'b)</strong></span>' + removeBtn + '</li>');
   }
   if (rec.km > 0) {
-    const kmBtn = isKmLocked(data) ? '<span style="font-size:.7rem;color:var(--gray)">🔒</span>' : '<button class="remove-btn" onclick="resetTodayKm()">✕</button>';
+    const kmBtn = (!active || isKmLocked(data)) ? '<span style="font-size:.7rem;color:var(--gray)">🔒</span>' : '<button class="remove-btn" onclick="resetTodayKm()">✕</button>';
     items.push('<li><span>🚶 ' + rec.km + ' km <strong>(+' + rec.km + 'b)</strong></span>' + kmBtn + '</li>');
   }
   if (items.length === 0) { list.innerHTML = ''; empty.style.display = 'block'; }
@@ -916,6 +932,16 @@ function renderActivities() {
   const scheduledDates = getScheduledDates(data);
   const infoEl = document.getElementById('activity-info');
   const container = document.getElementById('activity-slots-container');
+
+  if (!isProgramActive(data)) {
+    const td = getToday();
+    const msg = td < data.settings.programStart
+      ? 'Program začíná ' + formatDate(data.settings.programStart)
+      : 'Program skončil ' + formatDate(data.settings.programEnd);
+    infoEl.innerHTML = '<div class="warning-box">' + msg + '<br><small style="font-weight:400">Záznam aktivit je dostupný jen během programu.</small></div>';
+    container.innerHTML = '';
+    return;
+  }
 
   // If no scheduled dates at all
   if (scheduledDates.length === 0) {
@@ -1051,10 +1077,26 @@ function isKmLocked(data) {
   return new Date().getHours() >= (data.settings.kmCutoffHour || 21);
 }
 
+function isProgramActive(data) {
+  const today = getToday();
+  return today >= data.settings.programStart && today <= data.settings.programEnd;
+}
+
 function renderKm() {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
+  if (!isProgramActive(data)) {
+    const today = getToday();
+    const msg = today < data.settings.programStart
+      ? 'Program začíná ' + formatDate(data.settings.programStart)
+      : 'Program skončil ' + formatDate(data.settings.programEnd);
+    document.getElementById('km-lock-msg').style.display = 'block';
+    document.getElementById('km-lock-msg').innerHTML = msg + '<br><small style="font-weight:400">Záznam kilometrů je dostupný jen během programu.</small>';
+    document.getElementById('km-controls').style.display = 'none';
+    document.getElementById('km-slider').disabled = true;
+    return;
+  }
   const rec = getTodayRecord(child);
   const locked = isKmLocked(data);
   document.getElementById('km-today-saved').textContent = rec.km || 0;
@@ -1062,6 +1104,7 @@ function renderKm() {
   document.getElementById('km-value').textContent = rec.km || 0;
   document.getElementById('km-slider').disabled = locked;
   document.getElementById('km-lock-msg').style.display = locked ? 'block' : 'none';
+  document.getElementById('km-lock-msg').innerHTML = 'Záznam kilometrů je uzavřen.<br><small style="font-weight:400">Kilometry lze zapisovat každý den do stanovené hodiny.</small>';
   document.getElementById('km-controls').style.display = locked ? 'none' : 'block';
 }
 
@@ -1263,7 +1306,8 @@ function renderAdminSchedule() {
 
   // ---- Card 1: Program overview with day tiles ----
   html += '<div class="card">';
-  html += '<h2>Program</h2>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin-bottom:0">Program</h2>';
+  html += '<button class="btn btn-green btn-sm" onclick="exportScheduleExcel()">&#128202; Export rozvrhu</button></div>';
 
   // Date range inputs
   html += '<div class="program-range-row">';
@@ -1515,6 +1559,47 @@ function clearSchedule() {
   saveData(data);
   toast('Rozvrh smazán');
   renderAdminSchedule();
+}
+
+function exportScheduleExcel() {
+  const data = loadData();
+  const days = getDaysBetween(data.settings.programStart, data.settings.programEnd);
+  const dayNames = ['Ne','Po','Út','St','Čt','Pá','So'];
+  const educators = [...data.educators].sort((a, b) => a.name.localeCompare(b.name, 'cs'));
+
+  // Header row
+  const header = ['Datum', 'Den'];
+  educators.forEach(e => header.push(e.name));
+  const aoa = [header];
+
+  // Data rows
+  days.forEach(d => {
+    const parts = d.split('-');
+    const dateLabel = parseInt(parts[2],10) + '.' + parseInt(parts[1],10) + '.' + parts[0];
+    const dow = dayNames[new Date(d + 'T00:00:00').getDay()];
+    const row = [dateLabel, dow];
+    const sched = data.schedule[d];
+    educators.forEach(edu => {
+      let actName = '';
+      if (sched && sched.slots) {
+        const slot = sched.slots.find(s => s.educatorId === edu.id);
+        if (slot) {
+          const act = getActivity(data, slot.activityId);
+          if (act) actName = act.name;
+        }
+      }
+      row.push(actName);
+    });
+    aoa.push(row);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  // Column widths
+  ws['!cols'] = [{ wch: 12 }, { wch: 4 }];
+  educators.forEach(() => ws['!cols'].push({ wch: 20 }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Rozvrh');
+  XLSX.writeFile(wb, 'rozvrh_kretin.xlsx');
 }
 
 function saveProgramRange() {
@@ -1791,6 +1876,7 @@ function renderAdminChildren() {
       html += '<button class="btn btn-sm btn-red" style="float:right;padding:2px 8px;font-size:.75rem" onclick="event.stopPropagation();adminDeleteChild(\'' + c.id + '\')">Smazat</button>';
       html += '<button class="btn btn-sm btn-blue" style="float:right;padding:2px 8px;font-size:.75rem;margin-right:4px" onclick="event.stopPropagation();adminEditChild(\'' + c.id + '\')">Upravit</button>';
       html += '<button class="btn btn-sm btn-green" style="float:right;padding:2px 8px;font-size:.75rem;margin-right:4px" onclick="event.stopPropagation();adminAddRecord(\'' + c.id + '\')">+ Záznam</button>';
+      html += '<button class="btn btn-sm" style="float:right;padding:2px 8px;font-size:.75rem;margin-right:4px;background:#FF8F00;color:#fff" onclick="event.stopPropagation();adminResetPin(\'' + c.id + '\')">🔑 PIN</button>';
       html += '</summary><div style="margin-top:8px">' + daysHtml + '</div></details>';
     });
   }
@@ -1853,6 +1939,27 @@ function saveEditChild(id) {
   closeModal();
   renderAdminChildren();
   toast('Uloženo');
+}
+
+function adminResetPin(id) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Nový PIN — ' + esc(child.name) + '</h2><div class="form-group"><label>Nový PIN (4 číslice)</label><input type="password" id="reset-pin-input" maxlength="4" inputmode="numeric" placeholder="1234"></div><button class="btn btn-blue btn-block mt-8" onclick="saveResetPin(\'' + id + '\')">Uložit PIN</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveResetPin(id) {
+  const pin = document.getElementById('reset-pin-input').value.trim();
+  if (!pin || !/^\d{4}$/.test(pin)) { toast('PIN musí být 4 číslice!'); return; }
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+  child.pin = pin;
+  saveData(data);
+  closeModal();
+  toast('PIN změněn pro ' + child.name);
 }
 
 function showAdminAddChild() {
