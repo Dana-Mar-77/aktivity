@@ -1468,8 +1468,11 @@ function toggleScheduleSlot(eduId, actId) {
   const sched = data.schedule[scheduleDate];
   const idx = sched.slots.findIndex(s => s.educatorId === eduId && s.activityId === actId);
   if (idx >= 0) {
+    // Deselect — remove this slot
     sched.slots.splice(idx, 1);
   } else {
+    // Select — remove any existing slot for this educator first (radio behavior)
+    sched.slots = sched.slots.filter(s => s.educatorId !== eduId);
     const act = getActivity(data, actId);
     if (!act) return;
     sched.slots.push({
