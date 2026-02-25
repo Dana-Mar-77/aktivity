@@ -114,7 +114,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .educator-card{background:var(--gray-light);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px}
 .educator-card .edu-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .educator-card .edu-name{font-weight:700;font-size:1rem}
-.educator-activity{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:6px;background:var(--white);margin-bottom:4px;font-size:.85rem}
+.edu-chips-group{margin-bottom:6px}.edu-chips-group-label{font-size:.75rem;font-weight:700;margin-bottom:4px;color:var(--gray)}.edu-chips{display:flex;flex-wrap:wrap;gap:6px}.edu-chip{display:inline-flex;align-items:center;gap:3px;cursor:pointer;padding:4px 10px;border-radius:16px;font-size:.8rem;font-weight:600;user-select:none;transition:all .15s}.edu-chip.inactive{background:var(--gray-light);color:var(--gray)}.edu-chip.pts-10{background:var(--green);color:#fff}.edu-chip.pts-20{background:var(--orange);color:#fff}.edu-chip.pts-30{background:var(--purple);color:#fff}
 .schedule-slot{background:var(--white);border:2px solid #E0E0E0;border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;cursor:pointer;transition:all .2s}
 .schedule-slot.selected{border-color:var(--green);background:var(--green-light)}
 .schedule-slot.conflict{border-color:var(--red);background:#FFEBEE}
@@ -284,6 +284,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="flex-between mb-8"><h2 style="margin-bottom:0">Admin panel</h2><button class="btn btn-sm btn-red" onclick="logoutAdmin()">Odhlásit</button></div>
       <div class="admin-tabs" id="admin-tabs">
         <button class="admin-tab active" onclick="showAdminTab('schedule')">Denní rozvrh</button>
+        <button class="admin-tab" onclick="showAdminTab('activities')">Aktivity</button>
         <button class="admin-tab" onclick="showAdminTab('educators')">Vychovatelky</button>
         <button class="admin-tab" onclick="showAdminTab('children')">Děti</button>
         <button class="admin-tab" onclick="showAdminTab('stats')">Statistiky</button>
@@ -291,6 +292,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       </div>
     </div>
     <div id="admin-tab-schedule" class="admin-tab-content active"></div>
+    <div id="admin-tab-activities" class="admin-tab-content"></div>
     <div id="admin-tab-educators" class="admin-tab-content"></div>
     <div id="admin-tab-children" class="admin-tab-content"></div>
     <div id="admin-tab-stats" class="admin-tab-content"></div>
@@ -320,6 +322,7 @@ let _syncing = false;
 const DEFAULT_DATA = {
   children: [],
   educators: [],
+  activities: [],
   locations: [
     { id: "telocvicna", name: "Tělocvična", icon: "🏋️" },
     { id: "hriste", name: "Hřiště", icon: "⚽" },
@@ -347,6 +350,56 @@ function migrateData(d) {
   if (!d.settings) d.settings = JSON.parse(JSON.stringify(DEFAULT_DATA.settings));
   if (!d.settings.groups) d.settings.groups = DEFAULT_DATA.settings.groups;
   if (!d.settings.subgroups) d.settings.subgroups = DEFAULT_DATA.settings.subgroups;
+
+  // Migrate: educator.activities[] → global activities[] + educator.activityIds[]
+  if (!d.activities) {
+    d.activities = [];
+    const seen = {};
+    d.educators.forEach(edu => {
+      if (edu.activities && Array.isArray(edu.activities)) {
+        const ids = [];
+        edu.activities.forEach(act => {
+          if (!seen[act.name]) {
+            const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            d.activities.push({ id: id, name: act.name, points: act.points, icon: act.icon || '🏃', locationId: act.locationId || '', maxKids: act.maxKids || 8 });
+            seen[act.name] = id;
+          }
+          ids.push(seen[act.name]);
+        });
+        edu.activityIds = ids;
+        delete edu.activities;
+      }
+    });
+    // Migrate schedule slots: activityName → activityId
+    for (const date in d.schedule) {
+      if (d.schedule[date] && d.schedule[date].slots) {
+        d.schedule[date].slots.forEach(slot => {
+          if (slot.activityName && !slot.activityId) {
+            slot.activityId = seen[slot.activityName] || '';
+            delete slot.activityName;
+          }
+        });
+      }
+    }
+    // Migrate child records: add activityId
+    d.children.forEach(child => {
+      if (!child.records) return;
+      for (const day in child.records) {
+        const r = child.records[day];
+        if (r.activity && r.activity.name && !r.activity.activityId) {
+          r.activity.activityId = seen[r.activity.name] || '';
+        }
+      }
+    });
+  }
+  // Ensure all educators use activityIds format
+  d.educators.forEach(edu => {
+    if (!edu.activityIds) {
+      edu.activityIds = [];
+      delete edu.activities;
+    }
+  });
+
   return d;
 }
 
@@ -432,10 +485,10 @@ function getTotalPoints(child) {
   return total;
 }
 
-function getActivitySignups(data, date, activityName) {
+function getActivitySignups(data, date, activityId) {
   return data.children.filter(c => {
     const rec = c.records && c.records[date];
-    return rec && rec.activity && rec.activity.name === activityName;
+    return rec && rec.activity && rec.activity.activityId === activityId;
   }).length;
 }
 
@@ -452,6 +505,10 @@ function getLocationIcon(data, locId) {
 function getEducatorName(data, eduId) {
   const edu = data.educators.find(e => e.id === eduId);
   return edu ? edu.name : '?';
+}
+
+function getActivity(data, actId) {
+  return data.activities.find(a => a.id === actId);
 }
 
 // ============ STATE ============
@@ -487,7 +544,7 @@ function showAdminTab(tab) {
   document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.admin-tab-content').forEach(t => t.classList.remove('active'));
   const tabs = document.querySelectorAll('.admin-tab');
-  const idx = ['schedule','educators','children','stats','settings'].indexOf(tab);
+  const idx = ['schedule','activities','educators','children','stats','settings'].indexOf(tab);
   if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
   document.getElementById('admin-tab-' + tab).classList.add('active');
   renderAdmin();
@@ -691,9 +748,11 @@ function renderDashboard() {
       schedHtml += '</div>';
       schedHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
       sched.slots.forEach(s => {
-        const signups = getActivitySignups(data, date, s.activityName);
+        const act = getActivity(data, s.activityId);
+        const actName = act ? act.name : '?';
+        const signups = getActivitySignups(data, date, s.activityId);
         const locIcon = getLocationIcon(data, s.locationId);
-        schedHtml += '<div style="padding:10px;border-radius:var(--radius-sm);background:var(--gray-light);text-align:center;font-size:.8rem"><span style="font-size:1.4rem;display:block">' + (s.icon || '🏃') + '</span><strong>' + esc(s.activityName) + '</strong><br><span style="color:var(--gray);font-size:.7rem">' + locIcon + ' ' + getLocationName(data, s.locationId) + '</span><br><span style="font-size:.7rem;font-weight:700;color:' + (signups >= s.maxKids ? 'var(--red)' : 'var(--green)') + '">' + signups + '/' + s.maxKids + '</span></div>';
+        schedHtml += '<div style="padding:10px;border-radius:var(--radius-sm);background:var(--gray-light);text-align:center;font-size:.8rem"><span style="font-size:1.4rem;display:block">' + (s.icon || '🏃') + '</span><strong>' + esc(actName) + '</strong><br><span style="color:var(--gray);font-size:.7rem">' + locIcon + ' ' + getLocationName(data, s.locationId) + '</span><br><span style="font-size:.7rem;font-weight:700;color:' + (signups >= s.maxKids ? 'var(--red)' : 'var(--green)') + '">' + signups + '/' + s.maxKids + '</span></div>';
       });
       schedHtml += '</div></div>';
     });
@@ -817,9 +876,11 @@ function renderActivities() {
   }
   html += '<div class="activity-grid">';
   sched.slots.forEach(slot => {
-    const signups = getActivitySignups(data, selDate, slot.activityName);
+    const act = getActivity(data, slot.activityId);
+    const actName = act ? act.name : '?';
+    const signups = getActivitySignups(data, selDate, slot.activityId);
     const isFull = signups >= slot.maxKids;
-    const isThis = dateActivity && dateActivity.name === slot.activityName;
+    const isThis = dateActivity && dateActivity.activityId === slot.activityId;
     const ptsClass = slot.points <= 10 ? 'pts-10' : slot.points <= 20 ? 'pts-20' : 'pts-30';
     let cls = 'activity-tile ' + ptsClass;
     let onclick = '';
@@ -831,13 +892,13 @@ function renderActivities() {
     } else if (isFull) {
       cls += ' locked';
     } else {
-      onclick = 'onclick="addActivity(\'' + esc(slot.activityName).replace(/'/g, "\\'") + '\',' + slot.points + ',\'' + (slot.icon || '🏃') + '\')"';
+      onclick = 'onclick="addActivity(\'' + slot.activityId + '\')"';
     }
     const locIcon = getLocationIcon(data, slot.locationId);
     const eduName = getEducatorName(data, slot.educatorId);
     html += '<div class="' + cls + '" ' + onclick + '>';
     html += '<span class="tile-icon">' + (slot.icon || '🏃') + '</span>';
-    html += esc(slot.activityName);
+    html += esc(actName);
     html += '<div class="tile-meta">' + locIcon + ' ' + getLocationName(data, slot.locationId) + ' · ' + esc(eduName) + '</div>';
     html += '<div class="tile-capacity ' + (isFull ? 'full' : '') + '">' + signups + '/' + slot.maxKids + '</div>';
     html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + slot.points + 'b</div>';
@@ -847,25 +908,27 @@ function renderActivities() {
   container.innerHTML = '<div class="card">' + html + '</div>';
 }
 
-function addActivity(name, points, icon) {
+function addActivity(activityId) {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
+  const act = getActivity(data, activityId);
+  if (!act) return;
   const selDate = activityDate;
   const rec = getRecord(child, selDate);
   if (rec.activity) { toast('Na tento den už máš zvolenou aktivitu!'); return; }
   const sched = data.schedule[selDate];
   if (sched) {
-    const slot = sched.slots.find(s => s.activityName === name);
+    const slot = sched.slots.find(s => s.activityId === activityId);
     if (slot) {
-      const signups = getActivitySignups(data, selDate, name);
+      const signups = getActivitySignups(data, selDate, activityId);
       if (signups >= slot.maxKids) { toast('Aktivita je plná!'); return; }
     }
   }
-  rec.activity = { name, points, icon, timestamp: Date.now() };
+  rec.activity = { activityId: act.id, name: act.name, points: act.points, icon: act.icon, timestamp: Date.now() };
   saveData(data);
   renderActivities();
-  toast('+' + points + 'b za ' + name + '!');
+  toast('+' + act.points + 'b za ' + act.name + '!');
 }
 
 function cancelActivity() {
@@ -1076,6 +1139,7 @@ function hideProfileDetail() {
 // ============ ADMIN ============
 function renderAdmin() {
   if (currentAdminTab === 'schedule') renderAdminSchedule();
+  else if (currentAdminTab === 'activities') renderAdminActivities();
   else if (currentAdminTab === 'educators') renderAdminEducators();
   else if (currentAdminTab === 'children') renderAdminChildren();
   else if (currentAdminTab === 'stats') renderAdminStats();
@@ -1106,7 +1170,7 @@ function renderAdminSchedule() {
     html += '<ul class="check-list" style="list-style:none;margin-bottom:16px">';
     data.educators.forEach(edu => {
       const isChecked = sched && sched.slots && sched.slots.some(s => s.educatorId === edu.id);
-      html += '<li><input type="checkbox" id="edu-check-' + edu.id + '" data-eduid="' + edu.id + '" ' + (isChecked ? 'checked' : '') + ' onchange="renderScheduleActivities()"><label for="edu-check-' + edu.id + '">' + esc(edu.name) + ' (' + edu.activities.length + ' aktivit)</label></li>';
+      html += '<li><input type="checkbox" id="edu-check-' + edu.id + '" data-eduid="' + edu.id + '" ' + (isChecked ? 'checked' : '') + ' onchange="renderScheduleActivities()"><label for="edu-check-' + edu.id + '">' + esc(edu.name) + ' (' + (edu.activityIds ? edu.activityIds.length : 0) + ' aktivit)</label></li>';
     });
     html += '</ul>';
 
@@ -1116,13 +1180,15 @@ function renderAdminSchedule() {
     if (sched && sched.slots && sched.slots.length > 0) {
       html += '<div class="divider"></div><h3 class="mb-8">Přehled obsazenosti</h3>';
       sched.slots.forEach(slot => {
-        const signups = getActivitySignups(data, scheduleDate, slot.activityName);
+        const act = getActivity(data, slot.activityId);
+        const actName = act ? act.name : '?';
+        const signups = getActivitySignups(data, scheduleDate, slot.activityId);
         const children = data.children.filter(c => {
           const r = c.records && c.records[scheduleDate];
-          return r && r.activity && r.activity.name === slot.activityName;
+          return r && r.activity && r.activity.activityId === slot.activityId;
         });
         html += '<div style="padding:8px;margin-bottom:6px;border-radius:var(--radius-sm);background:var(--gray-light)">';
-        html += '<strong>' + (slot.icon || '🏃') + ' ' + esc(slot.activityName) + '</strong> — ' + signups + '/' + slot.maxKids;
+        html += '<strong>' + (slot.icon || '🏃') + ' ' + esc(actName) + '</strong> — ' + signups + '/' + slot.maxKids;
         if (children.length > 0) {
           html += '<div style="font-size:.8rem;color:var(--gray);margin-top:4px">' + children.map(c => esc(c.name)).join(', ') + '</div>';
         }
@@ -1153,7 +1219,7 @@ function renderScheduleActivities() {
   }
 
   const sched = data.schedule[scheduleDate];
-  const selectedActivities = sched && sched.slots ? sched.slots.map(s => s.educatorId + '::' + s.activityName) : [];
+  const selectedActivities = sched && sched.slots ? sched.slots.map(s => s.educatorId + '::' + s.activityId) : [];
 
   let html = '<h3 class="mb-8">Vyberte aktivity (max 4):</h3>';
   let hasConflict = false;
@@ -1163,9 +1229,11 @@ function renderScheduleActivities() {
   const allSlots = [];
   checkedEduIds.forEach(eduId => {
     const edu = data.educators.find(e => e.id === eduId);
-    if (!edu) return;
-    edu.activities.forEach(act => {
-      const key = eduId + '::' + act.name;
+    if (!edu || !edu.activityIds) return;
+    edu.activityIds.forEach(actId => {
+      const act = getActivity(data, actId);
+      if (!act) return;
+      const key = eduId + '::' + actId;
       const isSelected = selectedActivities.includes(key);
       if (isSelected) allSlots.push({ eduId, act, key });
     });
@@ -1183,15 +1251,17 @@ function renderScheduleActivities() {
 
   checkedEduIds.forEach(eduId => {
     const edu = data.educators.find(e => e.id === eduId);
-    if (!edu) return;
+    if (!edu || !edu.activityIds) return;
     html += '<div style="margin-bottom:12px"><strong>' + esc(edu.name) + '</strong>';
-    edu.activities.forEach(act => {
-      const key = eduId + '::' + act.name;
+    edu.activityIds.forEach(actId => {
+      const act = getActivity(data, actId);
+      if (!act) return;
+      const key = eduId + '::' + actId;
       const isSelected = selectedActivities.includes(key);
       const isConflict = isSelected && conflictLocations[act.locationId];
       const locIcon = getLocationIcon(data, act.locationId);
       const ptsColor = act.points <= 10 ? 'var(--green)' : act.points <= 20 ? 'var(--orange)' : 'var(--purple)';
-      html += '<div class="schedule-slot' + (isSelected ? ' selected' : '') + (isConflict ? ' conflict' : '') + '" onclick="toggleScheduleSlot(\'' + eduId + '\',\'' + esc(act.name).replace(/'/g, "\\'") + '\')">';
+      html += '<div class="schedule-slot' + (isSelected ? ' selected' : '') + (isConflict ? ' conflict' : '') + '" onclick="toggleScheduleSlot(\'' + eduId + '\',\'' + actId + '\')">';
       html += '<div class="slot-header"><span>' + (act.icon || '🏃') + ' <strong>' + esc(act.name) + '</strong> <span style="color:' + ptsColor + '">(' + act.points + 'b)</span></span>';
       html += '<span style="font-size:.8rem">' + locIcon + ' ' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + '</span></div>';
       if (isConflict) html += '<div class="slot-info" style="color:var(--red);font-weight:700">⚠️ Konflikt lokace!</div>';
@@ -1217,21 +1287,19 @@ function renderScheduleActivities() {
   container.innerHTML = html;
 }
 
-function toggleScheduleSlot(eduId, actName) {
+function toggleScheduleSlot(eduId, actId) {
   const data = loadData();
   if (!data.schedule[scheduleDate]) data.schedule[scheduleDate] = { timeSlot: '13:30–14:30', slots: [] };
   const sched = data.schedule[scheduleDate];
-  const idx = sched.slots.findIndex(s => s.educatorId === eduId && s.activityName === actName);
+  const idx = sched.slots.findIndex(s => s.educatorId === eduId && s.activityId === actId);
   if (idx >= 0) {
     sched.slots.splice(idx, 1);
   } else {
-    const edu = data.educators.find(e => e.id === eduId);
-    if (!edu) return;
-    const act = edu.activities.find(a => a.name === actName);
+    const act = getActivity(data, actId);
     if (!act) return;
     sched.slots.push({
       educatorId: eduId,
-      activityName: act.name,
+      activityId: act.id,
       points: act.points,
       icon: act.icon,
       locationId: act.locationId,
@@ -1262,25 +1330,136 @@ function clearSchedule() {
   renderAdminSchedule();
 }
 
+// ---- ACTIVITIES TAB (global catalog) ----
+function renderAdminActivities() {
+  const data = loadData();
+  const container = document.getElementById('admin-tab-activities');
+  let html = '<div class="card"><div class="flex-between mb-8"><h2 style="margin-bottom:0">Katalog aktivit</h2><button class="btn btn-sm btn-green" onclick="showAddGlobalActivity()">+ Přidat</button></div>';
+  if (data.activities.length === 0) {
+    html += '<div class="empty-state"><div class="empty-icon">🏃</div><p>Zatím žádné aktivity v katalogu.</p></div>';
+  } else {
+    html += '<div class="activity-grid">';
+    data.activities.forEach(act => {
+      const ptsClass = act.points <= 10 ? 'pts-10' : act.points <= 20 ? 'pts-20' : 'pts-30';
+      const locIcon = getLocationIcon(data, act.locationId);
+      const eduCount = data.educators.filter(e => e.activityIds && e.activityIds.includes(act.id)).length;
+      html += '<div class="activity-tile ' + ptsClass + '" style="cursor:default">';
+      html += '<span class="tile-icon">' + (act.icon || '🏃') + '</span>';
+      html += '<strong>' + esc(act.name) + '</strong>';
+      html += '<div class="tile-meta">' + locIcon + ' ' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + '</div>';
+      html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + act.points + 'b</div>';
+      if (eduCount > 0) html += '<div style="font-size:.65rem;color:var(--gray);margin-top:2px">👩‍🏫 ' + eduCount + '</div>';
+      html += '<div style="display:flex;gap:4px;justify-content:center;margin-top:6px"><button class="btn btn-sm btn-blue" style="padding:3px 8px;font-size:.7rem" onclick="event.stopPropagation();editGlobalActivity(\'' + act.id + '\')">✏️</button><button class="btn btn-sm btn-red" style="padding:3px 8px;font-size:.7rem" onclick="event.stopPropagation();deleteGlobalActivity(\'' + act.id + '\')">🗑️</button></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function showAddGlobalActivity() {
+  const data = loadData();
+  const locOptions = data.locations.map(l => '<option value="' + l.id + '">' + l.icon + ' ' + esc(l.name) + '</option>').join('');
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Přidat aktivitu</h2><div class="form-group"><label>Název</label><input type="text" id="gact-name" placeholder="Název aktivity"></div><div class="form-group"><label>Body</label><select id="gact-points"><option value="10">10 bodů (lehká)</option><option value="20">20 bodů (střední)</option><option value="30">30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="gact-icon" value="🏃" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="gact-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="gact-maxkids" value="8" min="1" max="50"></div><button class="btn btn-green btn-block mt-8" onclick="saveGlobalActivity()">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveGlobalActivity() {
+  const name = document.getElementById('gact-name').value.trim();
+  const points = parseInt(document.getElementById('gact-points').value);
+  const icon = document.getElementById('gact-icon').value.trim() || '🏃';
+  const locationId = document.getElementById('gact-location').value;
+  const maxKids = parseInt(document.getElementById('gact-maxkids').value) || 8;
+  if (!name) { toast('Vyplňte název!'); return; }
+  const data = loadData();
+  data.activities.push({ id: genId(), name: name, points: points, icon: icon, locationId: locationId, maxKids: maxKids });
+  saveData(data);
+  closeModal();
+  renderAdminActivities();
+  toast('Aktivita přidána do katalogu');
+}
+
+function editGlobalActivity(actId) {
+  const data = loadData();
+  const act = getActivity(data, actId);
+  if (!act) return;
+  const locOptions = data.locations.map(l => '<option value="' + l.id + '"' + (l.id === act.locationId ? ' selected' : '') + '>' + l.icon + ' ' + esc(l.name) + '</option>').join('');
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Upravit — ' + esc(act.name) + '</h2><div class="form-group"><label>Název</label><input type="text" id="gact-edit-name" value="' + esc(act.name) + '"></div><div class="form-group"><label>Body</label><select id="gact-edit-points"><option value="10"' + (act.points === 10 ? ' selected' : '') + '>10 bodů (lehká)</option><option value="20"' + (act.points === 20 ? ' selected' : '') + '>20 bodů (střední)</option><option value="30"' + (act.points === 30 ? ' selected' : '') + '>30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="gact-edit-icon" value="' + (act.icon || '🏃') + '" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="gact-edit-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="gact-edit-maxkids" value="' + act.maxKids + '" min="1" max="50"></div><button class="btn btn-blue btn-block mt-8" onclick="saveEditGlobalActivity(\'' + actId + '\')">Uložit</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveEditGlobalActivity(actId) {
+  const name = document.getElementById('gact-edit-name').value.trim();
+  const points = parseInt(document.getElementById('gact-edit-points').value);
+  const icon = document.getElementById('gact-edit-icon').value.trim() || '🏃';
+  const locationId = document.getElementById('gact-edit-location').value;
+  const maxKids = parseInt(document.getElementById('gact-edit-maxkids').value) || 8;
+  if (!name) { toast('Vyplňte název!'); return; }
+  const data = loadData();
+  const act = getActivity(data, actId);
+  if (!act) return;
+  act.name = name; act.points = points; act.icon = icon; act.locationId = locationId; act.maxKids = maxKids;
+  saveData(data);
+  closeModal();
+  renderAdminActivities();
+  toast('Aktivita upravena');
+}
+
+function deleteGlobalActivity(actId) {
+  const data = loadData();
+  const act = getActivity(data, actId);
+  if (!act) return;
+  if (!confirm('Smazat aktivitu "' + act.name + '"? Bude odebrána i ze všech vychovatelek.')) return;
+  data.activities = data.activities.filter(a => a.id !== actId);
+  // Remove from educators
+  data.educators.forEach(edu => {
+    if (edu.activityIds) edu.activityIds = edu.activityIds.filter(id => id !== actId);
+  });
+  // Remove from schedules
+  for (const date in data.schedule) {
+    if (data.schedule[date] && data.schedule[date].slots) {
+      data.schedule[date].slots = data.schedule[date].slots.filter(s => s.activityId !== actId);
+    }
+  }
+  saveData(data);
+  renderAdminActivities();
+  toast('Aktivita smazána');
+}
+
 // ---- EDUCATORS TAB ----
 function renderAdminEducators() {
   const data = loadData();
   const container = document.getElementById('admin-tab-educators');
   let html = '<div class="card"><div class="flex-between mb-8"><h2 style="margin-bottom:0">Vychovatelky</h2><button class="btn btn-sm btn-green" onclick="showAddEducator()">+ Přidat</button></div>';
 
+  if (data.activities.length === 0) {
+    html += '<div class="info-box">Nejprve vytvořte aktivity v záložce "Aktivity".</div>';
+  }
+
   if (data.educators.length === 0) {
     html += '<div class="empty-state"><div class="empty-icon">👩‍🏫</div><p>Zatím žádné vychovatelky.</p></div>';
   } else {
     data.educators.forEach(edu => {
-      html += '<div class="educator-card"><div class="edu-header"><span class="edu-name">' + esc(edu.name) + ' (' + edu.activities.length + ' aktivit)</span><div style="display:flex;gap:4px"><button class="btn btn-sm btn-blue" onclick="editEducator(\'' + edu.id + '\')">Upravit</button><button class="btn btn-sm btn-red" onclick="deleteEducator(\'' + edu.id + '\')">Smazat</button></div></div>';
-      if (edu.activities.length > 0) {
-        edu.activities.forEach((act, i) => {
-          const ptsColor = act.points <= 10 ? 'var(--green)' : act.points <= 20 ? 'var(--orange)' : 'var(--purple)';
-          const locIcon = getLocationIcon(data, act.locationId);
-          html += '<div class="educator-activity"><span class="ea-info">' + (act.icon || '🏃') + ' ' + esc(act.name) + ' <span style="color:' + ptsColor + ';font-weight:700">(' + act.points + 'b)</span><br><span class="ea-meta">' + locIcon + ' ' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + ' dětí</span></span><button class="btn btn-sm btn-red" style="padding:4px 8px;font-size:.7rem" onclick="removeEducatorActivity(\'' + edu.id + '\',' + i + ')">✕</button></div>';
+      const actIds = edu.activityIds || [];
+      html += '<div class="educator-card"><div class="edu-header"><span class="edu-name">' + esc(edu.name) + ' (' + actIds.length + ' aktivit)</span><div style="display:flex;gap:4px"><button class="btn btn-sm btn-blue" onclick="editEducator(\'' + edu.id + '\')">Upravit</button><button class="btn btn-sm btn-red" onclick="deleteEducator(\'' + edu.id + '\')">Smazat</button></div></div>';
+      // Chip groups by points
+      if (data.activities.length > 0) {
+        const groups = [{pts:10,label:'10 bodů',cls:'pts-10'},{pts:20,label:'20 bodů',cls:'pts-20'},{pts:30,label:'30 bodů',cls:'pts-30'}];
+        groups.forEach(g => {
+          const acts = data.activities.filter(a => a.points === g.pts);
+          if (acts.length === 0) return;
+          html += '<div class="edu-chips-group"><div class="edu-chips-group-label">' + g.label + '</div><div class="edu-chips">';
+          acts.forEach(act => {
+            const isActive = actIds.includes(act.id);
+            html += '<span class="edu-chip ' + (isActive ? g.cls : 'inactive') + '" onclick="toggleEducatorActivity(\'' + edu.id + '\',\'' + act.id + '\',' + !isActive + ')">' + (act.icon || '🏃') + ' ' + esc(act.name) + '</span>';
+          });
+          html += '</div></div>';
         });
       }
-      html += '<button class="btn btn-sm btn-outline mt-8" onclick="showAddActivity(\'' + edu.id + '\')">+ Přidat aktivitu</button></div>';
+      html += '</div>';
     });
   }
   html += '</div>';
@@ -1297,7 +1476,7 @@ function saveNewEducator() {
   const name = document.getElementById('edu-name').value.trim();
   if (!name) { toast('Vyplňte jméno!'); return; }
   const data = loadData();
-  data.educators.push({ id: genId(), name, activities: [] });
+  data.educators.push({ id: genId(), name, activityIds: [] });
   saveData(data);
   closeModal();
   renderAdminEducators();
@@ -1340,39 +1519,18 @@ function deleteEducator(id) {
   toast('Vychovatelka smazána');
 }
 
-function showAddActivity(eduId) {
-  const data = loadData();
-  const locOptions = data.locations.map(l => '<option value="' + l.id + '">' + l.icon + ' ' + esc(l.name) + '</option>').join('');
-  const modal = document.getElementById('modal-content');
-  modal.innerHTML = '<h2>Přidat aktivitu</h2><div class="form-group"><label>Název</label><input type="text" id="act-name" placeholder="Název aktivity"></div><div class="form-group"><label>Body</label><select id="act-points"><option value="10">10 bodů (lehká)</option><option value="20">20 bodů (střední)</option><option value="30">30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="act-icon" value="🏃" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="act-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="act-maxkids" value="8" min="1" max="50"></div><button class="btn btn-green btn-block mt-8" onclick="saveNewActivity(\'' + eduId + '\')">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
-  openModal();
-}
-
-function saveNewActivity(eduId) {
-  const name = document.getElementById('act-name').value.trim();
-  const points = parseInt(document.getElementById('act-points').value);
-  const icon = document.getElementById('act-icon').value.trim() || '🏃';
-  const locationId = document.getElementById('act-location').value;
-  const maxKids = parseInt(document.getElementById('act-maxkids').value) || 8;
-  if (!name) { toast('Vyplňte název!'); return; }
+function toggleEducatorActivity(eduId, actId, checked) {
   const data = loadData();
   const edu = data.educators.find(e => e.id === eduId);
   if (!edu) return;
-  edu.activities.push({ name, points, icon, locationId, maxKids });
-  saveData(data);
-  closeModal();
-  renderAdminEducators();
-  toast('Aktivita přidána');
-}
-
-function removeEducatorActivity(eduId, index) {
-  const data = loadData();
-  const edu = data.educators.find(e => e.id === eduId);
-  if (!edu) return;
-  edu.activities.splice(index, 1);
+  if (!edu.activityIds) edu.activityIds = [];
+  if (checked) {
+    if (!edu.activityIds.includes(actId)) edu.activityIds.push(actId);
+  } else {
+    edu.activityIds = edu.activityIds.filter(id => id !== actId);
+  }
   saveData(data);
   renderAdminEducators();
-  toast('Aktivita odebrána');
 }
 
 // ---- CHILDREN TAB ----
@@ -1524,15 +1682,9 @@ function adminAddRecord(id) {
   const child = data.children.find(c => c.id === id);
   if (!child) return;
 
-  // Gather all available activities from educators
-  const allActs = [];
-  data.educators.forEach(edu => {
-    edu.activities.forEach(act => {
-      allActs.push({ name: act.name, points: act.points, icon: act.icon });
-    });
-  });
-  const actOptions = allActs.length > 0
-    ? allActs.map(a => '<option value="' + esc(a.name) + '|' + a.points + '|' + (a.icon || '🏃') + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' (' + a.points + 'b)</option>').join('')
+  // Use global activity catalog
+  const actOptions = data.activities.length > 0
+    ? data.activities.map(a => '<option value="' + a.id + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' (' + a.points + 'b)</option>').join('')
     : '<option value="">Žádné aktivity</option>';
 
   const modal = document.getElementById('modal-content');
@@ -1545,13 +1697,13 @@ function saveAdminRecord(id) {
   const child = data.children.find(c => c.id === id);
   if (!child) return;
   const date = document.getElementById('rec-date').value;
-  const actVal = document.getElementById('rec-activity').value;
-  if (!date || !actVal) { toast('Vyplňte datum a aktivitu!'); return; }
-  const parts = actVal.split('|');
-  const name = parts[0], pts = parseInt(parts[1]), icon = parts[2] || '🏃';
+  const actId = document.getElementById('rec-activity').value;
+  if (!date || !actId) { toast('Vyplňte datum a aktivitu!'); return; }
+  const act = getActivity(data, actId);
+  if (!act) { toast('Aktivita nenalezena!'); return; }
   if (!child.records) child.records = {};
   if (!child.records[date]) child.records[date] = { activity: null, km: 0 };
-  child.records[date].activity = { name, points: pts, icon, timestamp: 0 };
+  child.records[date].activity = { activityId: act.id, name: act.name, points: act.points, icon: act.icon, timestamp: 0 };
   saveData(data);
   renderAdminChildren();
   toast('Záznam přidán');
