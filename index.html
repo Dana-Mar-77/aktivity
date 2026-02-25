@@ -765,10 +765,19 @@ function loginChild() {
 
 function logoutChild() { currentChildId = null; isAdmin = false; showNav(false); showScreen('auth'); }
 
-function loginAdmin() {
-  // const data = loadData();
-  // const pass = document.getElementById('admin-pass').value;
-  // if (pass !== data.settings.adminPassword) { toast('Špatné heslo!'); return; }
+async function hashPassword(plain) {
+  const data = new TextEncoder().encode(plain);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function isHashed(val) { return typeof val === 'string' && val.length === 64 && /^[a-f0-9]+$/.test(val); }
+
+async function loginAdmin() {
+  const data = loadData();
+  const pass = document.getElementById('admin-pass').value;
+  const hashed = await hashPassword(pass);
+  if (hashed !== data.settings.adminPassword) { toast('Špatné heslo!'); return; }
   isAdmin = true;
   hideAdminLogin();
   showNav(false);
@@ -2064,7 +2073,7 @@ function renderAdminSettings() {
 
   // Admin password
   html += '<h3 class="mb-8">Admin heslo</h3>';
-  html += '<div class="form-group"><input type="password" id="new-admin-pass" placeholder="Nové heslo" value="' + esc(data.settings.adminPassword) + '"></div>';
+  html += '<div class="form-group"><input type="password" id="new-admin-pass" placeholder="Zadejte nové heslo"></div>';
   html += '<button class="btn btn-sm btn-blue mb-16" onclick="saveAdminPassword()">Změnit heslo</button>';
 
   // KM cutoff
@@ -2142,11 +2151,11 @@ function removeSubgroup(i) {
   toast('Podskupina odebrána');
 }
 
-function saveAdminPassword() {
+async function saveAdminPassword() {
   const pass = document.getElementById('new-admin-pass').value.trim();
   if (!pass) { toast('Heslo nesmí být prázdné!'); return; }
   const data = loadData();
-  data.settings.adminPassword = pass;
+  data.settings.adminPassword = await hashPassword(pass);
   saveData(data);
   toast('Heslo změněno');
 }
@@ -2189,11 +2198,21 @@ function saveCancelBeforeStart() {
     }
   }
 
+  // Migrate plain text password to hash (after sync so we hash the final state)
+  const initData = loadData();
+  if (initData.settings.adminPassword && !isHashed(initData.settings.adminPassword)) {
+    initData.settings.adminPassword = await hashPassword(initData.settings.adminPassword);
+    saveData(initData);
+  }
+
   // Realtime: when someone else saves, update local cache
   sb.channel('app_state_sync')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, payload => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, async payload => {
       if (payload.new && payload.new.data) {
         const d = migrateData(payload.new.data);
+        if (d.settings.adminPassword && !isHashed(d.settings.adminPassword)) {
+          d.settings.adminPassword = await hashPassword(d.settings.adminPassword);
+        }
         _cache = d;
         localStorage.setItem('kretin_v2', JSON.stringify(d));
         refreshCurrentScreen();
