@@ -1986,8 +1986,11 @@ function saveCancelWindow() {
   if (synced) {
     refreshCurrentScreen();
   } else {
-    // First run: push local data to Supabase
-    pushToSupabase(loadData());
+    // Only push to Supabase if local data is not empty (has children or educators)
+    const local = loadData();
+    if ((local.children && local.children.length > 0) || (local.educators && local.educators.length > 0)) {
+      pushToSupabase(local);
+    }
   }
 
   // Realtime: when someone else saves, update local cache
