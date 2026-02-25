@@ -1,0 +1,1858 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--green:#4CAF50;--green-light:#E8F5E9;--blue:#2196F3;--blue-light:#E3F2FD;--orange:#FF9800;--orange-light:#FFF3E0;--purple:#9C27B0;--purple-light:#F3E5F5;--red:#F44336;--gray:#757575;--gray-light:#F5F5F5;--white:#FFFFFF;--shadow:0 2px 8px rgba(0,0,0,0.1);--shadow-lg:0 4px 16px rgba(0,0,0,0.15);--radius:12px;--radius-sm:8px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#E8F5E9 0%,#E3F2FD 100%);min-height:100vh;color:#333;line-height:1.5}
+.app-container{max-width:600px;margin:0 auto;padding:16px;padding-bottom:80px}
+.app-header{display:flex;align-items:center;gap:12px;padding:16px;background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px}
+.app-header img{height:48px;width:auto}
+.app-header .title-wrap h1{font-size:1.1rem;color:var(--green);line-height:1.2}
+.app-header .title-wrap p{font-size:.75rem;color:var(--gray)}
+.screen{display:none}.screen.active{display:block}
+.card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+.card h2{font-size:1.1rem;margin-bottom:12px;color:var(--blue)}
+.card h3{font-size:.95rem;margin-bottom:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border:none;border-radius:var(--radius-sm);font-size:1rem;font-weight:600;cursor:pointer;transition:transform .1s,box-shadow .2s;text-decoration:none;color:var(--white)}
+.btn:active{transform:scale(.97)}
+.btn-green{background:var(--green)}.btn-blue{background:var(--blue)}.btn-orange{background:var(--orange)}.btn-purple{background:var(--purple)}.btn-red{background:var(--red)}.btn-gray{background:var(--gray)}
+.btn-outline{background:transparent;border:2px solid var(--blue);color:var(--blue)}
+.btn-block{display:flex;width:100%}.btn-sm{padding:8px 14px;font-size:.85rem}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-weight:600;margin-bottom:4px;font-size:.9rem;color:#555}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 14px;border:2px solid #E0E0E0;border-radius:var(--radius-sm);font-size:1rem;transition:border-color .2s;font-family:inherit}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--blue)}
+.option-group{display:flex;gap:8px;flex-wrap:wrap}
+.option-btn{flex:1;min-width:80px;padding:10px;border:2px solid #E0E0E0;border-radius:var(--radius-sm);background:var(--white);text-align:center;cursor:pointer;font-size:.9rem;font-weight:600;transition:all .2s}
+.option-btn.selected{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
+.option-btn:hover{border-color:var(--blue)}
+.activity-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.activity-tile{padding:12px 8px;border-radius:var(--radius-sm);text-align:center;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .2s;border:2px solid transparent;position:relative}
+.activity-tile.pts-10{background:var(--green-light);color:#2E7D32;border-color:#C8E6C9}
+.activity-tile.pts-20{background:var(--orange-light);color:#E65100;border-color:#FFE0B2}
+.activity-tile.pts-30{background:var(--purple-light);color:#6A1B9A;border-color:#E1BEE7}
+.activity-tile .tile-icon{display:block;font-size:1.6rem;margin-bottom:2px}
+.activity-tile .tile-meta{font-size:.65rem;color:var(--gray);font-weight:400}
+.activity-tile .tile-capacity{font-size:.7rem;margin-top:4px;font-weight:700}
+.activity-tile .tile-capacity.full{color:var(--red)}
+.activity-tile:hover{transform:scale(1.03);box-shadow:var(--shadow)}
+.activity-tile.done{border-color:var(--green);box-shadow:0 0 0 2px var(--green)}
+.activity-tile.done::after{content:'\2713';position:absolute;top:4px;right:6px;font-size:.8rem;font-weight:700;color:var(--green)}
+.activity-tile.locked{opacity:.35;cursor:not-allowed;pointer-events:none}
+.activity-tile.done.cancellable{cursor:pointer}
+.avatar{width:64px;height:64px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:1.8rem;overflow:hidden;flex-shrink:0}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.avatar-large{width:80px;height:80px;font-size:2.2rem}
+.dash-hero{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+.dash-hero .info h2{color:#333;margin-bottom:2px}
+.dash-hero .info p{font-size:.85rem;color:var(--gray)}
+.points-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,var(--orange),#F57C00);color:var(--white);padding:6px 14px;border-radius:20px;font-weight:700;font-size:1.1rem;margin-top:6px}
+.today-list{list-style:none}
+.today-list li{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:.9rem}
+.today-list li:last-child{border-bottom:none}
+.today-list .remove-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:1.1rem;padding:2px 6px;border-radius:4px}
+.today-list .remove-btn:hover{background:#FFEBEE}
+.quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.quick-action{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px;border-radius:var(--radius);cursor:pointer;border:none;font-weight:700;font-size:.9rem;transition:transform .1s;color:var(--white)}
+.quick-action:active{transform:scale(.97)}.quick-action .icon{font-size:1.8rem}
+.km-display{text-align:center;font-size:3rem;font-weight:700;color:var(--blue);margin:16px 0}
+.km-display small{font-size:1.2rem;color:var(--gray)}
+.km-slider{width:100%;height:8px;-webkit-appearance:none;appearance:none;background:#E0E0E0;border-radius:4px;outline:none}
+.km-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:32px;height:32px;border-radius:50%;background:var(--blue);cursor:pointer;box-shadow:var(--shadow)}
+.km-buttons{display:flex;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.filter-btn{padding:6px 12px;border:2px solid #E0E0E0;border-radius:20px;background:var(--white);font-size:.8rem;font-weight:600;cursor:pointer;transition:all .2s}
+.filter-btn.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
+.lb-chart{display:flex;align-items:flex-end;gap:6px;padding:8px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;min-height:180px}
+.lb-bar{display:flex;flex-direction:column;align-items:center;flex:1;min-width:60px;max-width:90px}
+.lb-bar-top{display:flex;flex-direction:column;align-items:center;margin-bottom:4px}
+.lb-bar-top .avatar{width:34px;height:34px;font-size:1rem;margin-bottom:2px}
+.lb-bar-name{font-size:.7rem;font-weight:700;text-align:center;line-height:1.1;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-bar-sub{font-size:.6rem;color:var(--gray);font-weight:400}
+.lb-bar-col{width:100%;border-radius:6px 6px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:6px 2px;min-height:30px;transition:height .4s ease}
+.lb-bar-col .bar-pts{font-size:.8rem;font-weight:800;color:var(--white);text-shadow:0 1px 2px rgba(0,0,0,.2)}
+.lb-bar-col .bar-rank{font-size:.95rem;margin-bottom:2px}
+.lb-bar-col.bar-1{background:linear-gradient(180deg,#FFD54F,#F9A825)}
+.lb-bar-col.bar-2{background:linear-gradient(180deg,#E0E0E0,#9E9E9E)}
+.lb-bar-col.bar-3{background:linear-gradient(180deg,#FFAB91,#D84315)}
+.lb-bar-col.bar-rest{background:linear-gradient(180deg,#90CAF9,#1E88E5)}
+.group-comparison{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.group-card{padding:14px;border-radius:var(--radius-sm);text-align:center;font-weight:700}
+.group-card .group-name{font-size:.85rem;margin-bottom:4px}
+.group-card .group-pts{font-size:1.4rem}
+.group-card .group-avg{font-size:.75rem;font-weight:400;color:var(--gray)}
+.profiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:12px}
+.profile-icon{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:var(--radius);cursor:pointer;transition:all .2s;border:2px solid transparent;text-align:center}
+.profile-icon:hover{border-color:var(--blue);background:var(--blue-light)}
+.profile-icon .avatar{width:52px;height:52px;font-size:1.6rem}
+.profile-icon .profile-name{font-size:.75rem;font-weight:700;line-height:1.1;word-break:break-word}
+.profile-icon .profile-pts{font-size:.65rem;color:var(--orange);font-weight:700}
+.profile-detail-header{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.profile-detail-header .avatar{width:64px;height:64px;font-size:1.8rem}
+.profile-detail-header .pd-info h3{font-size:1rem;margin-bottom:2px}
+.profile-detail-header .pd-info p{font-size:.8rem;color:var(--gray)}
+.profile-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.profile-stat{text-align:center;padding:10px 6px;border-radius:var(--radius-sm);background:var(--gray-light)}
+.profile-stat .stat-val{font-size:1.3rem;font-weight:800;display:block}
+.profile-stat .stat-label{font-size:.65rem;color:var(--gray);font-weight:600}
+.profile-day{padding:8px 0;border-bottom:1px solid #f0f0f0}
+.profile-day:last-child{border-bottom:none}
+.profile-day-date{font-weight:700;font-size:.85rem;margin-bottom:4px;color:#555}
+.profile-day-items{display:flex;flex-wrap:wrap;gap:4px}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--white);box-shadow:0 -2px 8px rgba(0,0,0,.1);display:flex;justify-content:space-around;padding:6px 0 env(safe-area-inset-bottom,6px);z-index:100}
+.nav-btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px;border:none;background:none;font-size:.6rem;color:var(--gray);cursor:pointer;font-weight:600;transition:color .2s}
+.nav-btn .nav-icon{font-size:1.2rem}.nav-btn.active{color:var(--blue)}
+.admin-tabs{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:16px;padding-bottom:4px}
+.admin-tab{padding:8px 14px;border:2px solid #E0E0E0;border-radius:20px;background:var(--white);font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .2s}
+.admin-tab.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
+.admin-tab-content{display:none}.admin-tab-content.active{display:block}
+.educator-card{background:var(--gray-light);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px}
+.educator-card .edu-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.educator-card .edu-name{font-weight:700;font-size:1rem}
+.educator-activity{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:6px;background:var(--white);margin-bottom:4px;font-size:.85rem}
+.schedule-slot{background:var(--white);border:2px solid #E0E0E0;border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.schedule-slot.selected{border-color:var(--green);background:var(--green-light)}
+.schedule-slot.conflict{border-color:var(--red);background:#FFEBEE}
+.schedule-slot .slot-info{font-size:.8rem;color:var(--gray);margin-top:4px}
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;font-size:.75rem;font-weight:600}
+.tag-green{background:var(--green-light);color:#2E7D32}
+.tag-orange{background:var(--orange-light);color:#E65100}
+.tag-purple{background:var(--purple-light);color:#6A1B9A}
+.tag-blue{background:var(--blue-light);color:#1565C0}
+.tag .remove-tag{cursor:pointer;margin-left:2px;font-weight:700}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{padding:14px;border-radius:var(--radius-sm);text-align:center}
+.stat-card .stat-num{font-size:1.6rem;font-weight:800;display:block}
+.stat-card .stat-lbl{font-size:.75rem;color:var(--gray)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--white);border-radius:var(--radius);padding:24px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal h2{margin-bottom:16px}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:#333;color:#fff;padding:10px 20px;border-radius:20px;font-size:.9rem;font-weight:600;opacity:0;transition:all .3s;z-index:300;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.child-list{list-style:none;max-height:300px;overflow-y:auto}
+.child-list-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:var(--radius-sm);cursor:pointer;transition:background .2s;border:2px solid transparent}
+.child-list-item:hover{background:var(--blue-light);border-color:var(--blue)}
+.child-list-item .avatar{width:40px;height:40px;font-size:1.2rem}
+.child-list-item .cl-info{flex:1;font-weight:600;font-size:.9rem}
+.child-list-item .cl-info small{font-weight:400;color:var(--gray);display:block;font-size:.75rem}
+.photo-upload{display:flex;align-items:center;gap:12px}
+.photo-upload .avatar{cursor:pointer}
+.photo-upload input[type="file"]{display:none}
+.photo-upload .upload-hint{font-size:.8rem;color:var(--gray)}
+.warning-box{padding:12px;border-radius:var(--radius-sm);background:#FFEBEE;color:#C62828;font-weight:600;margin-bottom:12px;font-size:.9rem}
+.info-box{padding:12px;border-radius:var(--radius-sm);background:var(--blue-light);color:#1565C0;font-weight:600;margin-bottom:12px;font-size:.9rem}
+.success-box{padding:12px;border-radius:var(--radius-sm);background:var(--green-light);color:#2E7D32;font-weight:600;margin-bottom:12px;font-size:.9rem}
+.text-center{text-align:center}.mt-8{margin-top:8px}.mt-12{margin-top:12px}.mt-16{margin-top:16px}.mb-8{margin-bottom:8px}.mb-16{margin-bottom:16px}
+.flex-between{display:flex;justify-content:space-between;align-items:center}
+.empty-state{text-align:center;padding:24px;color:var(--gray);font-size:.9rem}
+.empty-state .empty-icon{font-size:2.5rem;margin-bottom:8px}
+.divider{height:1px;background:#eee;margin:12px 0}
+.sub-filter-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.admin-record{margin-bottom:10px;padding:12px;border-radius:var(--radius-sm);background:var(--gray-light)}
+.admin-record summary{font-weight:600;cursor:pointer;padding:4px 0}
+.admin-day-record{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:6px 0;border-bottom:1px solid #eee;font-size:.85rem}
+@media(max-width:400px){.activity-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}.quick-actions{grid-template-columns:1fr 1fr}.group-comparison{grid-template-columns:1fr}.app-header h1{font-size:.95rem}.admin-tab{font-size:.7rem;padding:6px 10px}}
+</style>
+</head>
+<body>
+<div class="app-container">
+  <div class="app-header">
+    <img src="https://kretin.detskelecebny.cz/visual/loga/logo_kretin.svg" alt="Logo" onerror="this.style.display='none'">
+    <div class="title-wrap"><h1>Pohybové aktivity</h1><p>Dětská léčebna Křetín · 3.3. – 31.3.2026</p></div>
+  </div>
+
+  <!-- AUTH -->
+  <div id="screen-auth" class="screen active">
+    <div class="card">
+      <h2>Vítej!</h2>
+      <p style="margin-bottom:16px;font-size:.9rem;color:var(--gray)">Zaregistruj se nebo se přihlas a začni sbírat body za pohyb!</p>
+      <button class="btn btn-green btn-block mb-8" onclick="showRegister()">Nová registrace</button>
+      <button class="btn btn-blue btn-block mb-8" onclick="showLogin()">Přihlásit se</button>
+      <div class="divider"></div>
+      <button class="btn btn-gray btn-block btn-sm" onclick="showAdminLogin()">Admin</button>
+    </div>
+    <div id="register-form" class="card" style="display:none">
+      <h2>Registrace</h2>
+      <div class="form-group"><label>Jméno / přezdívka</label><input type="text" id="reg-name" placeholder="Tvoje jméno" maxlength="30"></div>
+      <div class="form-group"><label>Pohlaví</label><div class="option-group" id="reg-gender"><div class="option-btn" data-val="kluk" onclick="selectOption(this)">Kluk</div><div class="option-btn" data-val="holka" onclick="selectOption(this)">Holka</div></div></div>
+      <div class="form-group"><label>Věk</label><input type="number" id="reg-age" placeholder="Kolik ti je?" min="4" max="18"></div>
+      <div class="form-group"><label>Skupina</label><div class="option-group" id="reg-group"></div></div>
+      <div class="form-group"><label>Podskupina</label><div class="option-group" id="reg-subgroup"></div></div>
+      <div class="form-group"><label>PIN (4 číslice)</label><input type="password" id="reg-pin" placeholder="1234" maxlength="4" inputmode="numeric" pattern="[0-9]*"></div>
+      <div class="form-group"><label>Fotka (volitelně)</label><div class="photo-upload"><div class="avatar" id="reg-avatar-preview" onclick="document.getElementById('reg-photo').click()">📷</div><input type="file" id="reg-photo" accept="image/*" onchange="previewPhoto(this)"><span class="upload-hint">Klikni na ikonu</span></div></div>
+      <button class="btn btn-green btn-block mt-8" onclick="registerChild()">Zaregistrovat se</button>
+      <button class="btn btn-outline btn-block btn-sm mt-8" onclick="hideRegister()">Zpět</button>
+    </div>
+    <div id="login-form" class="card" style="display:none">
+      <h2>Přihlášení</h2>
+      <p style="font-size:.85rem;color:var(--gray);margin-bottom:12px">Vyber se ze seznamu:</p>
+      <ul class="child-list" id="login-list"></ul>
+      <div id="login-pin-wrap" style="display:none" class="mt-12">
+        <div class="form-group"><label>Zadej PIN</label><input type="password" id="login-pin" placeholder="PIN" maxlength="4" inputmode="numeric" pattern="[0-9]*"></div>
+        <button class="btn btn-blue btn-block" onclick="loginChild()">Přihlásit</button>
+      </div>
+      <button class="btn btn-outline btn-block btn-sm mt-12" onclick="hideLogin()">Zpět</button>
+    </div>
+    <div id="admin-login" class="card" style="display:none">
+      <h2>Admin přihlášení</h2>
+      <div class="form-group"><label>Heslo</label><input type="password" id="admin-pass" placeholder="Zadejte heslo"></div>
+      <button class="btn btn-gray btn-block" onclick="loginAdmin()">Přihlásit</button>
+      <button class="btn btn-outline btn-block btn-sm mt-8" onclick="hideAdminLogin()">Zpět</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="screen-dashboard" class="screen">
+    <div class="card">
+      <div class="dash-hero">
+        <div class="avatar avatar-large" id="dash-avatar"></div>
+        <div class="info"><h2 id="dash-name"></h2><p id="dash-group"></p><div class="points-badge">⭐ <span id="dash-points">0</span> bodů</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="flex-between mb-8"><h2 style="margin-bottom:0">Dnešní záznamy</h2><span id="dash-date" style="font-size:.8rem;color:var(--gray)"></span></div>
+      <ul class="today-list" id="dash-today-list"></ul>
+      <div id="dash-today-empty" class="empty-state" style="display:none"><div class="empty-icon">📝</div><p>Zatím žádné záznamy. Pojď sportovat!</p></div>
+    </div>
+    <div class="card" id="dash-schedule-card">
+      <h2>Dnešní nabídka aktivit</h2>
+      <div id="dash-schedule-preview"></div>
+    </div>
+    <div class="quick-actions">
+      <button class="quick-action" style="background:linear-gradient(135deg,var(--green),#388E3C)" onclick="showScreen('activities')"><span class="icon">🏃</span>Zapsat aktivitu</button>
+      <button class="quick-action" style="background:linear-gradient(135deg,var(--blue),#1565C0)" onclick="showScreen('km')"><span class="icon">🚶</span>Zapsat km</button>
+    </div>
+  </div>
+
+  <!-- ACTIVITIES -->
+  <div id="screen-activities" class="screen">
+    <div class="card"><h2>Záznam aktivit</h2><div id="activity-info"></div></div>
+    <div id="activity-slots-container"></div>
+  </div>
+
+  <!-- KM -->
+  <div id="screen-km" class="screen">
+    <div class="card" style="padding-top:0;overflow:hidden">
+      <svg viewBox="0 0 600 200" style="width:100%;height:auto;display:block;margin:0 -20px;width:calc(100% + 40px)">
+        <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#87CEEB"/><stop offset="100%" stop-color="#E3F2FD"/></linearGradient><linearGradient id="hill1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#66BB6A"/><stop offset="100%" stop-color="#388E3C"/></linearGradient><linearGradient id="hill2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#81C784"/><stop offset="100%" stop-color="#4CAF50"/></linearGradient><linearGradient id="hill3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#A5D6A7"/><stop offset="100%" stop-color="#66BB6A"/></linearGradient></defs>
+        <rect width="600" height="200" fill="url(#sky)"/><circle cx="520" cy="40" r="28" fill="#FFD54F"/>
+        <g stroke="#FFD54F" stroke-width="3" fill="none"><line x1="520" y1="5" x2="520" y2="0"/><line x1="547" y1="13" x2="552" y2="8"/><line x1="555" y1="40" x2="560" y2="40"/><line x1="547" y1="67" x2="552" y2="72"/><line x1="520" y1="75" x2="520" y2="80"/><line x1="493" y1="67" x2="488" y2="72"/><line x1="485" y1="40" x2="480" y2="40"/><line x1="493" y1="13" x2="488" y2="8"/></g>
+        <g fill="white" opacity=".8"><ellipse cx="120" cy="35" rx="35" ry="14"/><ellipse cx="100" cy="30" rx="20" ry="12"/><ellipse cx="140" cy="32" rx="22" ry="10"/><ellipse cx="350" cy="25" rx="28" ry="11"/><ellipse cx="335" cy="20" rx="18" ry="10"/><ellipse cx="370" cy="22" rx="20" ry="9"/></g>
+        <path d="M0 160 Q80 80 200 120 Q320 60 420 110 Q520 70 600 100 L600 200 L0 200Z" fill="url(#hill1)"/>
+        <g fill="#2E7D32"><polygon points="90,105 100,70 110,105"/><rect x="98" y="105" width="4" height="10" fill="#5D4037"/><polygon points="340,88 352,48 364,88"/><rect x="350" y="88" width="4" height="12" fill="#5D4037"/><polygon points="530,82 540,50 550,82"/><rect x="538" y="82" width="4" height="10" fill="#5D4037"/></g>
+        <path d="M0 170 Q100 120 220 150 Q350 110 450 140 Q530 115 600 135 L600 200 L0 200Z" fill="url(#hill2)"/>
+        <path d="M0 185 Q150 155 300 170 Q450 150 600 165 L600 200 L0 200Z" fill="url(#hill3)"/>
+        <path d="M50 195 Q150 172 250 180 Q350 168 480 175" stroke="#C8B88A" stroke-width="4" fill="none" stroke-dasharray="8 4" opacity=".6"/>
+        <g transform="translate(180,148)"><rect x="-5" y="8" width="10" height="16" rx="3" fill="#F06292"/><line x1="-3" y1="24" x2="-6" y2="34" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><line x1="3" y1="24" x2="8" y2="33" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><circle cx="-6" cy="35" r="2.5" fill="#7B1FA2"/><circle cx="8" cy="34" r="2.5" fill="#7B1FA2"/><line x1="-5" y1="12" x2="-14" y2="2" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><line x1="5" y1="12" x2="14" y2="2" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><circle cx="0" cy="2" r="8" fill="#FFB74D"/><path d="M-8 0 Q-8 -8 0 -8 Q8 -8 8 0" fill="#5D4037"/><circle cx="-3" cy="0" r="1" fill="#333"/><circle cx="3" cy="0" r="1" fill="#333"/><path d="M-3 4 Q0 7 3 4" stroke="#333" stroke-width=".8" fill="none"/></g>
+        <g transform="translate(230,152)"><rect x="-5" y="8" width="10" height="15" rx="3" fill="#42A5F5"/><line x1="-3" y1="23" x2="-8" y2="32" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><line x1="3" y1="23" x2="9" y2="31" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><circle cx="-8" cy="33" r="2.5" fill="#1565C0"/><circle cx="9" cy="32" r="2.5" fill="#1565C0"/><line x1="-5" y1="12" x2="-13" y2="8" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><line x1="5" y1="12" x2="13" y2="8" stroke="#FFB74D" stroke-width="3" stroke-linecap="round"/><circle cx="0" cy="2" r="8" fill="#FFB74D"/><path d="M-7 -2 Q-6 -9 0 -9 Q6 -9 7 -2" fill="#FFB300"/><circle cx="-3" cy="0" r="1" fill="#333"/><circle cx="3" cy="0" r="1" fill="#333"/><path d="M-3 4 Q0 7 3 4" stroke="#333" stroke-width=".8" fill="none"/><ellipse cx="0" cy="-7" rx="8" ry="3" fill="#F44336"/><rect x="-8" y="-9" width="16" height="3" rx="1" fill="#F44336"/></g>
+        <g transform="translate(290,158)"><rect x="-4" y="6" width="8" height="12" rx="3" fill="#FF9800"/><line x1="-2" y1="18" x2="-8" y2="26" stroke="#FFB74D" stroke-width="2.5" stroke-linecap="round"/><line x1="2" y1="18" x2="10" y2="24" stroke="#FFB74D" stroke-width="2.5" stroke-linecap="round"/><circle cx="-8" cy="27" r="2" fill="#E65100"/><circle cx="10" cy="25" r="2" fill="#E65100"/><line x1="-4" y1="10" x2="-10" y2="5" stroke="#FFB74D" stroke-width="2.5" stroke-linecap="round"/><line x1="4" y1="10" x2="11" y2="14" stroke="#FFB74D" stroke-width="2.5" stroke-linecap="round"/><circle cx="0" cy="0" r="7" fill="#FFB74D"/><path d="M-6 -2 Q-5 -8 0 -8 Q5 -8 6 -2" fill="#D84315"/><circle cx="-2" cy="-1" r="1" fill="#333"/><circle cx="3" cy="-1" r="1" fill="#333"/><path d="M-2 3 Q.5 6 3 3" stroke="#333" stroke-width=".7" fill="none"/></g>
+      </svg>
+      <h2>Záznam kilometrů</h2>
+      <p style="font-size:.85rem;color:var(--gray)">Kolik km jsi dnes nachodil/a?</p>
+      <div id="km-lock-msg" class="warning-box" style="display:none">Záznam kilometrů je uzavřen.<br><small style="font-weight:400">Kilometry lze zapisovat každý den do stanovené hodiny.</small></div>
+      <div id="km-controls">
+        <div class="km-display"><span id="km-value">0</span> <small>km</small></div>
+        <input type="range" class="km-slider" id="km-slider" min="0" max="20" step="0.5" value="0" oninput="updateKmDisplay(this.value)">
+        <div class="km-buttons"><button class="btn btn-sm btn-outline" onclick="adjustKm(-1)">-1</button><button class="btn btn-sm btn-outline" onclick="adjustKm(-0.5)">-0.5</button><button class="btn btn-sm btn-outline" onclick="adjustKm(0.5)">+0.5</button><button class="btn btn-sm btn-outline" onclick="adjustKm(1)">+1</button></div>
+        <div class="mt-16 text-center"><p style="font-size:.85rem;color:var(--gray);margin-bottom:8px">Dnes zapsáno: <strong id="km-today-saved">0</strong> km</p><button class="btn btn-blue btn-block" onclick="saveKm()">Uložit kilometry</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div id="screen-leaderboard" class="screen">
+    <div class="card"><h2>Žebříček</h2><div class="filter-bar" id="leaderboard-filters"></div><div class="sub-filter-row" id="subgroup-filters"></div><div id="leaderboard-chart" class="mt-12"></div></div>
+    <div class="card"><h3 class="mb-8">Srovnání skupin</h3><div class="group-comparison" id="group-compare"></div></div>
+    <div class="card"><h3 class="mb-8">Srovnání podskupin</h3><div class="group-comparison" id="subgroup-compare" style="grid-template-columns:1fr 1fr 1fr"></div></div>
+  </div>
+
+  <!-- PROFILES -->
+  <div id="screen-profiles" class="screen">
+    <div class="card"><h2>Všechny děti</h2><div id="profiles-grid" class="profiles-grid"></div></div>
+    <div id="profile-detail" style="display:none"></div>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="screen-admin" class="screen">
+    <div class="card">
+      <div class="flex-between mb-8"><h2 style="margin-bottom:0">Admin panel</h2><button class="btn btn-sm btn-red" onclick="logoutAdmin()">Odhlásit</button></div>
+      <div class="admin-tabs" id="admin-tabs">
+        <button class="admin-tab active" onclick="showAdminTab('schedule')">Denní rozvrh</button>
+        <button class="admin-tab" onclick="showAdminTab('educators')">Vychovatelky</button>
+        <button class="admin-tab" onclick="showAdminTab('children')">Děti</button>
+        <button class="admin-tab" onclick="showAdminTab('stats')">Statistiky</button>
+        <button class="admin-tab" onclick="showAdminTab('settings')">Nastavení</button>
+      </div>
+    </div>
+    <div id="admin-tab-schedule" class="admin-tab-content active"></div>
+    <div id="admin-tab-educators" class="admin-tab-content"></div>
+    <div id="admin-tab-children" class="admin-tab-content"></div>
+    <div id="admin-tab-stats" class="admin-tab-content"></div>
+    <div id="admin-tab-settings" class="admin-tab-content"></div>
+  </div>
+</div>
+
+<nav class="bottom-nav" id="bottom-nav" style="display:none">
+  <button class="nav-btn active" data-screen="dashboard" onclick="showScreen('dashboard')"><span class="nav-icon">🏠</span>Přehled</button>
+  <button class="nav-btn" data-screen="activities" onclick="showScreen('activities')"><span class="nav-icon">🏃</span>Aktivity</button>
+  <button class="nav-btn" data-screen="km" onclick="showScreen('km')"><span class="nav-icon">🚶</span>Kilometry</button>
+  <button class="nav-btn" data-screen="leaderboard" onclick="showScreen('leaderboard')"><span class="nav-icon">🏆</span>Žebříček</button>
+  <button class="nav-btn" data-screen="profiles" onclick="showScreen('profiles')"><span class="nav-icon">👥</span>Děti</button>
+  <button class="nav-btn" data-screen="auth" onclick="logoutChild()"><span class="nav-icon">🚪</span>Odhlásit</button>
+</nav>
+<div class="toast" id="toast"></div>
+<div class="modal-overlay" id="modal-overlay"><div class="modal" id="modal-content"></div></div>
+<script>
+// ============ SUPABASE ============
+const SUPABASE_URL = 'https://fapcodsdlanixidmqaiy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_qs3liD4kaOecwWIbpAY6Tw_dD10VaC5';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let _cache = null;
+let _syncing = false;
+
+// ============ DATA MODEL ============
+const DEFAULT_DATA = {
+  children: [],
+  educators: [],
+  locations: [
+    { id: "telocvicna", name: "Tělocvična", icon: "🏋️" },
+    { id: "hriste", name: "Hřiště", icon: "⚽" },
+    { id: "hala", name: "Hala", icon: "🏟️" },
+    { id: "bazen", name: "Bazén", icon: "🏊" },
+    { id: "park", name: "Park", icon: "🌳" },
+    { id: "okoli", name: "Okolí", icon: "🏞️" }
+  ],
+  schedule: {},
+  settings: {
+    adminPassword: "kretin2026",
+    kmCutoffHour: 21,
+    cancelWindowMinutes: 60,
+    groups: ["Hvězdičky", "Sluníčka"],
+    subgroups: ["Žraloci", "Kosatky", "Krokodýli"]
+  }
+};
+
+function migrateData(d) {
+  if (!d) return JSON.parse(JSON.stringify(DEFAULT_DATA));
+  if (!d.locations) d.locations = DEFAULT_DATA.locations;
+  if (!d.schedule) d.schedule = {};
+  if (!d.educators) d.educators = [];
+  if (!d.children) d.children = [];
+  if (!d.settings) d.settings = JSON.parse(JSON.stringify(DEFAULT_DATA.settings));
+  if (!d.settings.groups) d.settings.groups = DEFAULT_DATA.settings.groups;
+  if (!d.settings.subgroups) d.settings.subgroups = DEFAULT_DATA.settings.subgroups;
+  return d;
+}
+
+function loadData() {
+  if (_cache) return _cache;
+  try {
+    const d = JSON.parse(localStorage.getItem('kretin_v2'));
+    _cache = migrateData(d);
+    return _cache;
+  } catch { return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+}
+
+function saveData(data) {
+  _cache = data;
+  localStorage.setItem('kretin_v2', JSON.stringify(data));
+  pushToSupabase(data);
+}
+
+async function pushToSupabase(data) {
+  if (_syncing) return;
+  _syncing = true;
+  try {
+    await sb.from('app_state').upsert({ id: 1, data: data, updated_at: new Date().toISOString() });
+  } catch (e) { console.error('Supabase push:', e); }
+  _syncing = false;
+}
+
+async function syncFromSupabase() {
+  try {
+    const { data: row, error } = await sb.from('app_state').select('data').eq('id', 1).single();
+    if (error) throw error;
+    if (row && row.data && (row.data.children || row.data.settings)) {
+      const d = migrateData(row.data);
+      _cache = d;
+      localStorage.setItem('kretin_v2', JSON.stringify(d));
+      return true;
+    }
+  } catch (e) { console.error('Supabase sync:', e); }
+  return false;
+}
+
+function refreshCurrentScreen() {
+  const active = document.querySelector('.screen.active');
+  if (!active) return;
+  const id = active.id.replace('screen-', '');
+  if (id === 'dashboard') renderDashboard();
+  else if (id === 'activities') renderActivities();
+  else if (id === 'km') renderKm();
+  else if (id === 'leaderboard') renderLeaderboard();
+  else if (id === 'profiles') renderProfiles();
+  else if (id === 'admin') renderAdmin();
+}
+
+function getToday() { return new Date().toISOString().slice(0, 10); }
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function formatDate(d) { const p = d.split('-'); return p[2] + '.' + p[1] + '.' + p[0]; }
+function formatDateShort(d) { const p = d.split('-'); return p[2] + '.' + p[1] + '.'; }
+
+function getRecord(child, date) {
+  if (!child.records) child.records = {};
+  if (!child.records[date]) child.records[date] = { activity: null, km: 0 };
+  const rec = child.records[date];
+  if (rec.activities && !rec.activity) {
+    if (rec.activities.length > 0) rec.activity = rec.activities[0];
+    delete rec.activities;
+  }
+  return rec;
+}
+
+function getTodayRecord(child) {
+  return getRecord(child, getToday());
+}
+
+function getTotalPoints(child) {
+  if (!child.records) return 0;
+  let total = 0;
+  for (const day in child.records) {
+    const r = child.records[day];
+    if (r.activity) total += r.activity.points;
+    if (r.activities) r.activities.forEach(a => { total += a.points; });
+    if (r.km) total += r.km;
+  }
+  return total;
+}
+
+function getActivitySignups(data, date, activityName) {
+  return data.children.filter(c => {
+    const rec = c.records && c.records[date];
+    return rec && rec.activity && rec.activity.name === activityName;
+  }).length;
+}
+
+function getLocationName(data, locId) {
+  const loc = data.locations.find(l => l.id === locId);
+  return loc ? loc.name : locId;
+}
+
+function getLocationIcon(data, locId) {
+  const loc = data.locations.find(l => l.id === locId);
+  return loc ? loc.icon : '📍';
+}
+
+function getEducatorName(data, eduId) {
+  const edu = data.educators.find(e => e.id === eduId);
+  return edu ? edu.name : '?';
+}
+
+// ============ STATE ============
+let currentChildId = null;
+let isAdmin = false;
+let currentFilter = 'all';
+let currentSubFilter = 'all';
+let selectedLoginId = null;
+let regPhotoData = null;
+let currentAdminTab = 'schedule';
+let scheduleDate = getToday();
+let activityDate = getToday();
+
+// ============ NAVIGATION ============
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const nb = document.querySelector('.nav-btn[data-screen="' + name + '"]');
+  if (nb) nb.classList.add('active');
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'activities') renderActivities();
+  if (name === 'km') renderKm();
+  if (name === 'leaderboard') renderLeaderboard();
+  if (name === 'profiles') renderProfiles();
+  if (name === 'admin') renderAdmin();
+}
+
+function showNav(show) { document.getElementById('bottom-nav').style.display = show ? 'flex' : 'none'; }
+
+function showAdminTab(tab) {
+  currentAdminTab = tab;
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.admin-tab-content').forEach(t => t.classList.remove('active'));
+  const tabs = document.querySelectorAll('.admin-tab');
+  const idx = ['schedule','educators','children','stats','settings'].indexOf(tab);
+  if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
+  document.getElementById('admin-tab-' + tab).classList.add('active');
+  renderAdmin();
+}
+
+// ============ TOAST & MODAL ============
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function openModal() { document.getElementById('modal-overlay').classList.add('open'); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+// ============ UTILS ============
+function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+
+function selectOption(el) {
+  el.parentElement.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function getSelectedOption(groupId) {
+  const sel = document.querySelector('#' + groupId + ' .option-btn.selected');
+  return sel ? sel.dataset.val : null;
+}
+
+// ============ AUTH ============
+function renderGroupOptions() {
+  const data = loadData();
+  const groupEl = document.getElementById('reg-group');
+  const subEl = document.getElementById('reg-subgroup');
+  if (groupEl) groupEl.innerHTML = data.settings.groups.map(g =>
+    '<div class="option-btn" data-val="' + esc(g) + '" onclick="selectOption(this)">' + esc(g) + '</div>'
+  ).join('');
+  if (subEl) subEl.innerHTML = data.settings.subgroups.map(s =>
+    '<div class="option-btn" data-val="' + esc(s) + '" onclick="selectOption(this)">' + esc(s) + '</div>'
+  ).join('');
+}
+
+function showRegister() {
+  document.getElementById('register-form').style.display = 'block';
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('admin-login').style.display = 'none';
+  renderGroupOptions();
+}
+function hideRegister() { document.getElementById('register-form').style.display = 'none'; }
+function showLogin() {
+  document.getElementById('login-form').style.display = 'block';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('admin-login').style.display = 'none';
+  renderLoginList();
+}
+function hideLogin() { document.getElementById('login-form').style.display = 'none'; selectedLoginId = null; }
+function showAdminLogin() {
+  document.getElementById('admin-login').style.display = 'block';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'none';
+}
+function hideAdminLogin() { document.getElementById('admin-login').style.display = 'none'; }
+
+function previewPhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    regPhotoData = e.target.result;
+    document.getElementById('reg-avatar-preview').innerHTML = '<img src="' + regPhotoData + '" alt="foto">';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function registerChild() {
+  const name = document.getElementById('reg-name').value.trim();
+  const gender = getSelectedOption('reg-gender');
+  const age = parseInt(document.getElementById('reg-age').value);
+  const group = getSelectedOption('reg-group');
+  const subgroup = getSelectedOption('reg-subgroup');
+  const pin = document.getElementById('reg-pin').value.trim();
+  if (!name) { toast('Vyplň jméno!'); return; }
+  if (!gender) { toast('Vyber pohlaví!'); return; }
+  if (!age || age < 4 || age > 18) { toast('Vyplň věk (4–18)!'); return; }
+  if (!group) { toast('Vyber skupinu!'); return; }
+  if (!subgroup) { toast('Vyber podskupinu!'); return; }
+  if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) { toast('PIN musí být 4 číslice!'); return; }
+  const data = loadData();
+  const id = genId();
+  data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, records: {} });
+  saveData(data);
+  regPhotoData = null;
+  document.getElementById('reg-name').value = '';
+  document.getElementById('reg-age').value = '';
+  document.getElementById('reg-pin').value = '';
+  document.getElementById('reg-photo').value = '';
+  document.getElementById('reg-avatar-preview').innerHTML = '📷';
+  document.querySelectorAll('#register-form .option-btn').forEach(b => b.classList.remove('selected'));
+  currentChildId = id;
+  hideRegister();
+  showNav(true);
+  showScreen('dashboard');
+  toast('Registrace úspěšná!');
+}
+
+function renderLoginList() {
+  const data = loadData();
+  const list = document.getElementById('login-list');
+  document.getElementById('login-pin-wrap').style.display = 'none';
+  selectedLoginId = null;
+  if (data.children.length === 0) {
+    list.innerHTML = '<li class="empty-state"><div class="empty-icon">🤷</div><p>Zatím nikdo není registrovaný.</p></li>';
+    return;
+  }
+  list.innerHTML = data.children.map(c => '<li class="child-list-item" onclick="selectLoginChild(\'' + c.id + '\',this)"><div class="avatar">' + (c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧')) + '</div><div class="cl-info">' + esc(c.name) + '<small>' + esc(c.group) + ' · ' + esc(c.subgroup) + ' · ' + c.age + ' let</small></div></li>').join('');
+}
+
+function selectLoginChild(id, el) {
+  selectedLoginId = id;
+  document.querySelectorAll('.child-list-item').forEach(i => i.style.background = '');
+  el.style.background = '#E3F2FD';
+  document.getElementById('login-pin-wrap').style.display = 'block';
+  document.getElementById('login-pin').value = '';
+  document.getElementById('login-pin').focus();
+}
+
+function loginChild() {
+  if (!selectedLoginId) { toast('Vyber se ze seznamu!'); return; }
+  const pin = document.getElementById('login-pin').value.trim();
+  const data = loadData();
+  const child = data.children.find(c => c.id === selectedLoginId);
+  if (!child) { toast('Dítě nenalezeno!'); return; }
+  if (child.pin !== pin) { toast('Špatný PIN!'); return; }
+  currentChildId = child.id;
+  hideLogin();
+  showNav(true);
+  showScreen('dashboard');
+  toast('Ahoj, ' + child.name + '!');
+}
+
+function logoutChild() { currentChildId = null; isAdmin = false; showNav(false); showScreen('auth'); }
+
+function loginAdmin() {
+  const data = loadData();
+  const pass = document.getElementById('admin-pass').value;
+  if (pass !== data.settings.adminPassword) { toast('Špatné heslo!'); return; }
+  isAdmin = true;
+  hideAdminLogin();
+  showNav(false);
+  showScreen('admin');
+  toast('Admin přihlášen');
+}
+
+function logoutAdmin() { isAdmin = false; showScreen('auth'); }
+
+// ============ DASHBOARD ============
+function renderDashboard() {
+  const data = loadData();
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  document.getElementById('dash-avatar').innerHTML = child.photo ? '<img src="' + child.photo + '" alt="">' : (child.gender === 'kluk' ? '🧒' : '👧');
+  document.getElementById('dash-name').textContent = child.name;
+  document.getElementById('dash-group').textContent = child.group + ' · ' + child.subgroup + ' · ' + child.age + ' let';
+  document.getElementById('dash-points').textContent = getTotalPoints(child);
+  const today = getToday();
+  document.getElementById('dash-date').textContent = formatDate(today);
+  const rec = getTodayRecord(child);
+  const list = document.getElementById('dash-today-list');
+  const empty = document.getElementById('dash-today-empty');
+  const items = [];
+  if (rec.activity) {
+    const canRemove = isCancellable(rec.activity, data);
+    const removeBtn = canRemove
+      ? '<button class="remove-btn" onclick="removeTodayActivity()" title="Odebrat">✕</button>'
+      : '<span style="font-size:.7rem;color:var(--gray)">🔒</span>';
+    items.push('<li><span>' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' <strong>(+' + rec.activity.points + 'b)</strong></span>' + removeBtn + '</li>');
+  }
+  if (rec.km > 0) {
+    const kmBtn = isKmLocked(data) ? '<span style="font-size:.7rem;color:var(--gray)">🔒</span>' : '<button class="remove-btn" onclick="resetTodayKm()">✕</button>';
+    items.push('<li><span>🚶 ' + rec.km + ' km <strong>(+' + rec.km + 'b)</strong></span>' + kmBtn + '</li>');
+  }
+  if (items.length === 0) { list.innerHTML = ''; empty.style.display = 'block'; }
+  else { list.innerHTML = items.join(''); empty.style.display = 'none'; }
+
+  // Schedule preview — show all scheduled dates
+  const scheduledDates = getScheduledDates(data);
+  const preview = document.getElementById('dash-schedule-preview');
+  if (scheduledDates.length === 0) {
+    preview.innerHTML = '<div class="empty-state"><p>Nejsou naplánovány žádné aktivity.</p></div>';
+  } else {
+    let schedHtml = '';
+    scheduledDates.forEach(date => {
+      const sched = data.schedule[date];
+      const isToday = date === today;
+      const dateLabel = isToday ? '📅 Dnes (' + formatDateShort(date) + ')' : '📅 ' + formatDateShort(date);
+      const childRec = getRecord(child, date);
+      const hasDone = childRec.activity;
+      schedHtml += '<div style="margin-bottom:12px">';
+      schedHtml += '<div style="font-weight:700;font-size:.9rem;margin-bottom:6px;color:' + (isToday ? 'var(--blue)' : '#555') + '">' + dateLabel;
+      if (sched.timeSlot) schedHtml += ' <span style="font-weight:400;font-size:.8rem;color:var(--gray)">⏰ ' + esc(sched.timeSlot) + '</span>';
+      if (hasDone) schedHtml += ' <span style="color:var(--green)">✓</span>';
+      schedHtml += '</div>';
+      schedHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+      sched.slots.forEach(s => {
+        const signups = getActivitySignups(data, date, s.activityName);
+        const locIcon = getLocationIcon(data, s.locationId);
+        schedHtml += '<div style="padding:10px;border-radius:var(--radius-sm);background:var(--gray-light);text-align:center;font-size:.8rem"><span style="font-size:1.4rem;display:block">' + (s.icon || '🏃') + '</span><strong>' + esc(s.activityName) + '</strong><br><span style="color:var(--gray);font-size:.7rem">' + locIcon + ' ' + getLocationName(data, s.locationId) + '</span><br><span style="font-size:.7rem;font-weight:700;color:' + (signups >= s.maxKids ? 'var(--red)' : 'var(--green)') + '">' + signups + '/' + s.maxKids + '</span></div>';
+      });
+      schedHtml += '</div></div>';
+    });
+    preview.innerHTML = schedHtml;
+  }
+}
+
+function removeTodayActivity() {
+  const data = loadData();
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const rec = getTodayRecord(child);
+  if (!rec.activity) return;
+  if (!isCancellable(rec.activity, data)) { toast('Čas na změnu vypršel'); return; }
+  const name = rec.activity.name;
+  rec.activity = null;
+  saveData(data);
+  renderDashboard();
+  toast('Odebráno: ' + name);
+}
+
+function resetTodayKm() {
+  const data = loadData();
+  if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const rec = getTodayRecord(child);
+  rec.km = 0;
+  saveData(data);
+  renderDashboard();
+  toast('Kilometry resetovány');
+}
+
+// ============ ACTIVITIES ============
+function getScheduledDates(data) {
+  const dates = Object.keys(data.schedule).filter(d => {
+    const s = data.schedule[d];
+    return s && s.slots && s.slots.length > 0;
+  }).sort();
+  return dates;
+}
+
+function isCancellable(activity, data) {
+  if (!activity || !activity.timestamp) return false;
+  const window = (data.settings.cancelWindowMinutes || 60) * 60 * 1000;
+  return (Date.now() - activity.timestamp) < window;
+}
+
+function getCancelMinutesLeft(activity, data) {
+  if (!activity || !activity.timestamp) return 0;
+  const window = (data.settings.cancelWindowMinutes || 60) * 60 * 1000;
+  return Math.max(0, Math.ceil((window - (Date.now() - activity.timestamp)) / 60000));
+}
+
+function renderActivities() {
+  const data = loadData();
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const today = getToday();
+  const scheduledDates = getScheduledDates(data);
+  const infoEl = document.getElementById('activity-info');
+  const container = document.getElementById('activity-slots-container');
+
+  // If no scheduled dates at all
+  if (scheduledDates.length === 0) {
+    infoEl.innerHTML = '';
+    container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">📋</div><p>Nejsou naplánovány žádné aktivity.</p></div></div>';
+    return;
+  }
+
+  // Make sure activityDate is a valid scheduled date
+  if (!scheduledDates.includes(activityDate)) {
+    // Try today first, then nearest future, then first available
+    if (scheduledDates.includes(today)) activityDate = today;
+    else {
+      const future = scheduledDates.find(d => d >= today);
+      activityDate = future || scheduledDates[scheduledDates.length - 1];
+    }
+  }
+
+  const selDate = activityDate;
+  const rec = getRecord(child, selDate);
+  const dateActivity = rec.activity;
+  const canCancel = dateActivity && isCancellable(dateActivity, data);
+  const sched = data.schedule[selDate];
+  const isToday = selDate === today;
+
+  // Date selector tabs
+  let dateTabsHtml = '<div class="filter-bar" style="margin-bottom:12px">';
+  scheduledDates.forEach(d => {
+    const isActive = d === selDate;
+    const label = d === today ? 'Dnes ' + formatDateShort(d) : formatDateShort(d);
+    const dayRec = getRecord(child, d);
+    const hasDone = dayRec.activity ? ' ✓' : '';
+    dateTabsHtml += '<button class="filter-btn' + (isActive ? ' active' : '') + '" onclick="activityDate=\'' + d + '\';renderActivities()">' + label + hasDone + '</button>';
+  });
+  dateTabsHtml += '</div>';
+
+  // Info box for selected date
+  let infoHtml = dateTabsHtml;
+  if (dateActivity) {
+    if (canCancel) {
+      const mins = getCancelMinutesLeft(dateActivity, data);
+      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + 'b)<br><small style="font-weight:400">Můžeš změnit ještě ' + mins + ' min — klikni na aktivitu pro zrušení</small></div>';
+    } else {
+      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + 'b)<br><small style="font-weight:400;color:var(--gray)">Aktivita je uzamčena</small></div>';
+    }
+  } else {
+    infoHtml += '<div class="info-box">Vyber si jednu aktivitu na ' + formatDate(selDate) + ':</div>';
+  }
+  infoEl.innerHTML = infoHtml;
+
+  if (!sched || !sched.slots || sched.slots.length === 0) {
+    container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">📋</div><p>Na tento den nejsou naplánovány aktivity.</p></div></div>';
+    return;
+  }
+
+  let html = '';
+  if (sched.timeSlot) {
+    html += '<p style="text-align:center;font-size:.85rem;color:var(--gray);margin-bottom:12px">⏰ ' + esc(sched.timeSlot) + '</p>';
+  }
+  html += '<div class="activity-grid">';
+  sched.slots.forEach(slot => {
+    const signups = getActivitySignups(data, selDate, slot.activityName);
+    const isFull = signups >= slot.maxKids;
+    const isThis = dateActivity && dateActivity.name === slot.activityName;
+    const ptsClass = slot.points <= 10 ? 'pts-10' : slot.points <= 20 ? 'pts-20' : 'pts-30';
+    let cls = 'activity-tile ' + ptsClass;
+    let onclick = '';
+    if (isThis) {
+      cls += ' done';
+      if (canCancel) { cls += ' cancellable'; onclick = 'onclick="cancelActivity()"'; }
+    } else if (dateActivity) {
+      cls += ' locked';
+    } else if (isFull) {
+      cls += ' locked';
+    } else {
+      onclick = 'onclick="addActivity(\'' + esc(slot.activityName).replace(/'/g, "\\'") + '\',' + slot.points + ',\'' + (slot.icon || '🏃') + '\')"';
+    }
+    const locIcon = getLocationIcon(data, slot.locationId);
+    const eduName = getEducatorName(data, slot.educatorId);
+    html += '<div class="' + cls + '" ' + onclick + '>';
+    html += '<span class="tile-icon">' + (slot.icon || '🏃') + '</span>';
+    html += esc(slot.activityName);
+    html += '<div class="tile-meta">' + locIcon + ' ' + getLocationName(data, slot.locationId) + ' · ' + esc(eduName) + '</div>';
+    html += '<div class="tile-capacity ' + (isFull ? 'full' : '') + '">' + signups + '/' + slot.maxKids + '</div>';
+    html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + slot.points + 'b</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = '<div class="card">' + html + '</div>';
+}
+
+function addActivity(name, points, icon) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const selDate = activityDate;
+  const rec = getRecord(child, selDate);
+  if (rec.activity) { toast('Na tento den už máš zvolenou aktivitu!'); return; }
+  const sched = data.schedule[selDate];
+  if (sched) {
+    const slot = sched.slots.find(s => s.activityName === name);
+    if (slot) {
+      const signups = getActivitySignups(data, selDate, name);
+      if (signups >= slot.maxKids) { toast('Aktivita je plná!'); return; }
+    }
+  }
+  rec.activity = { name, points, icon, timestamp: Date.now() };
+  saveData(data);
+  renderActivities();
+  toast('+' + points + 'b za ' + name + '!');
+}
+
+function cancelActivity() {
+  const data = loadData();
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const rec = getRecord(child, activityDate);
+  if (!rec.activity) return;
+  if (!isCancellable(rec.activity, data)) { toast('Čas na změnu vypršel'); return; }
+  const name = rec.activity.name;
+  rec.activity = null;
+  saveData(data);
+  renderActivities();
+  toast('Zrušeno: ' + name + ' — vyber jinou');
+}
+
+// ============ KILOMETERS ============
+function isKmLocked(data) {
+  return new Date().getHours() >= (data.settings.kmCutoffHour || 21);
+}
+
+function renderKm() {
+  const data = loadData();
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const rec = getTodayRecord(child);
+  const locked = isKmLocked(data);
+  document.getElementById('km-today-saved').textContent = rec.km || 0;
+  document.getElementById('km-slider').value = rec.km || 0;
+  document.getElementById('km-value').textContent = rec.km || 0;
+  document.getElementById('km-slider').disabled = locked;
+  document.getElementById('km-lock-msg').style.display = locked ? 'block' : 'none';
+  document.getElementById('km-controls').style.display = locked ? 'none' : 'block';
+}
+
+function updateKmDisplay(val) { document.getElementById('km-value').textContent = val; }
+
+function adjustKm(delta) {
+  const data = loadData();
+  if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
+  const slider = document.getElementById('km-slider');
+  let val = Math.max(0, Math.min(20, Math.round((parseFloat(slider.value) + delta) * 2) / 2));
+  slider.value = val;
+  updateKmDisplay(val);
+}
+
+function saveKm() {
+  const data = loadData();
+  if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const rec = getTodayRecord(child);
+  const val = parseFloat(document.getElementById('km-slider').value);
+  rec.km = val;
+  saveData(data);
+  document.getElementById('km-today-saved').textContent = val;
+  toast('Uloženo: ' + val + ' km (+' + val + 'b)');
+}
+
+// ============ LEADERBOARD ============
+function renderLeaderboardFilters() {
+  const data = loadData();
+  const fBar = document.getElementById('leaderboard-filters');
+  let html = '<button class="filter-btn ' + (currentFilter === 'all' ? 'active' : '') + '" onclick="setFilter(\'all\',this)">Všichni</button>';
+  html += '<button class="filter-btn ' + (currentFilter === 'kluk' ? 'active' : '') + '" onclick="setFilter(\'kluk\',this)">Kluci</button>';
+  html += '<button class="filter-btn ' + (currentFilter === 'holka' ? 'active' : '') + '" onclick="setFilter(\'holka\',this)">Holky</button>';
+  data.settings.groups.forEach(g => {
+    html += '<button class="filter-btn ' + (currentFilter === g ? 'active' : '') + '" onclick="setFilter(\'' + esc(g) + '\',this)">' + esc(g) + '</button>';
+  });
+  fBar.innerHTML = html;
+
+  const sBar = document.getElementById('subgroup-filters');
+  let shtml = '<button class="filter-btn ' + (currentSubFilter === 'all' ? 'active' : '') + '" onclick="setSubFilter(\'all\',this)">Všechny</button>';
+  data.settings.subgroups.forEach(s => {
+    shtml += '<button class="filter-btn ' + (currentSubFilter === s ? 'active' : '') + '" onclick="setSubFilter(\'' + esc(s) + '\',this)">' + esc(s) + '</button>';
+  });
+  sBar.innerHTML = shtml;
+}
+
+function setFilter(f) { currentFilter = f; renderLeaderboard(); }
+function setSubFilter(f) { currentSubFilter = f; renderLeaderboard(); }
+
+function renderLeaderboard() {
+  const data = loadData();
+  renderLeaderboardFilters();
+  renderGroupCompare(data);
+  renderSubgroupCompare(data);
+
+  let children = [...data.children];
+  if (currentFilter === 'kluk' || currentFilter === 'holka') children = children.filter(c => c.gender === currentFilter);
+  else if (currentFilter !== 'all') children = children.filter(c => c.group === currentFilter);
+  if (currentSubFilter !== 'all') children = children.filter(c => c.subgroup === currentSubFilter);
+  children.sort((a, b) => getTotalPoints(b) - getTotalPoints(a));
+
+  const container = document.getElementById('leaderboard-chart');
+  if (children.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏆</div><p>Žádní účastníci.</p></div>';
+    return;
+  }
+  const maxPts = Math.max(1, getTotalPoints(children[0]));
+  container.innerHTML = '<div class="lb-chart">' + children.map((c, i) => {
+    const rank = i + 1;
+    const pts = getTotalPoints(c);
+    const barH = Math.max(30, Math.round((pts / maxPts) * 150));
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+    const barCls = rank <= 3 ? 'bar-' + rank : 'bar-rest';
+    const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
+    return '<div class="lb-bar"><div class="lb-bar-top"><div class="avatar">' + av + '</div><div class="lb-bar-name">' + esc(c.name) + '</div><div class="lb-bar-sub">' + esc(c.subgroup) + '</div></div><div class="lb-bar-col ' + barCls + '" style="height:' + barH + 'px">' + (medal ? '<span class="bar-rank">' + medal + '</span>' : '<span class="bar-rank" style="font-size:.7rem;color:rgba(255,255,255,.8)">' + rank + '.</span>') + '<span class="bar-pts">' + pts + 'b</span></div></div>';
+  }).join('') + '</div>';
+}
+
+function renderGroupCompare(data) {
+  const container = document.getElementById('group-compare');
+  const colors = ['#FFF8E1', '#FFFDE7', '#E8F5E9', '#F3E5F5'];
+  container.innerHTML = data.settings.groups.map((g, i) => {
+    const members = data.children.filter(c => c.group === g);
+    const total = members.reduce((s, c) => s + getTotalPoints(c), 0);
+    const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
+    return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+  }).join('');
+}
+
+function renderSubgroupCompare(data) {
+  const container = document.getElementById('subgroup-compare');
+  const colors = ['#E3F2FD', '#E8F5E9', '#FFF3E0', '#F3E5F5'];
+  container.style.gridTemplateColumns = 'repeat(' + Math.min(data.settings.subgroups.length, 3) + ',1fr)';
+  container.innerHTML = data.settings.subgroups.map((s, i) => {
+    const members = data.children.filter(c => c.subgroup === s);
+    const total = members.reduce((sum, c) => sum + getTotalPoints(c), 0);
+    const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
+    return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+  }).join('');
+}
+
+// ============ PROFILES ============
+function renderProfiles() {
+  const data = loadData();
+  const grid = document.getElementById('profiles-grid');
+  const detail = document.getElementById('profile-detail');
+  detail.style.display = 'none';
+  if (data.children.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><p>Zatím žádné děti.</p></div>';
+    return;
+  }
+  grid.innerHTML = data.children.map(c => {
+    const pts = getTotalPoints(c);
+    const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
+    return '<div class="profile-icon" onclick="showProfileDetail(\'' + c.id + '\')"><div class="avatar">' + av + '</div><div class="profile-name">' + esc(c.name) + '</div><div class="profile-pts">⭐ ' + pts + 'b</div></div>';
+  }).join('');
+}
+
+function showProfileDetail(id) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+  const pts = getTotalPoints(child);
+  const av = child.photo ? '<img src="' + child.photo + '" alt="">' : (child.gender === 'kluk' ? '🧒' : '👧');
+  const rankings = getRankings(child, data);
+  let totalKm = 0;
+  const days = Object.keys(child.records || {}).sort();
+  days.forEach(d => { totalKm += (child.records[d].km || 0); });
+  const activeDays = days.filter(d => { const r = child.records[d]; return (r.activity || (r.activities && r.activities.length > 0)) || r.km > 0; }).length;
+
+  let daysHtml = '';
+  if (days.length > 0) {
+    daysHtml = [...days].reverse().map(day => {
+      const r = child.records[day];
+      const items = [];
+      if (r.activity) {
+        const cls = r.activity.points <= 10 ? 'tag-green' : r.activity.points <= 20 ? 'tag-orange' : 'tag-purple';
+        items.push('<span class="tag ' + cls + '">' + (r.activity.icon || '🏃') + ' ' + esc(r.activity.name) + ' +' + r.activity.points + 'b</span>');
+      }
+      if (r.activities) r.activities.forEach(a => {
+        const cls = a.points <= 10 ? 'tag-green' : a.points <= 20 ? 'tag-orange' : 'tag-purple';
+        items.push('<span class="tag ' + cls + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' +' + a.points + 'b</span>');
+      });
+      if (r.km > 0) items.push('<span class="tag tag-blue">🚶 ' + r.km + ' km</span>');
+      if (items.length === 0) return '';
+      return '<div class="profile-day"><div class="profile-day-date">📅 ' + formatDate(day) + '</div><div class="profile-day-items">' + items.join('') + '</div></div>';
+    }).filter(Boolean).join('');
+  }
+  if (!daysHtml) daysHtml = '<div class="empty-state"><div class="empty-icon">📝</div><p>Zatím žádné záznamy.</p></div>';
+
+  const detail = document.getElementById('profile-detail');
+  detail.style.display = 'block';
+  detail.innerHTML = '<div class="card"><button class="btn btn-sm btn-outline mb-8" onclick="hideProfileDetail()">← Zpět</button><div class="profile-detail-header"><div class="avatar">' + av + '</div><div class="pd-info"><h3>' + esc(child.name) + '</h3><p>' + esc(child.group) + ' · ' + esc(child.subgroup) + ' · ' + child.age + ' let</p></div></div><div class="profile-stats"><div class="profile-stat" style="background:#FFF8E1"><span class="stat-val" style="color:var(--orange)">⭐ ' + pts + '</span><span class="stat-label">Celkem bodů</span></div><div class="profile-stat" style="background:#E3F2FD"><span class="stat-val" style="color:var(--blue)">🚶 ' + totalKm + '</span><span class="stat-label">Celkem km</span></div><div class="profile-stat" style="background:#E8F5E9"><span class="stat-val" style="color:var(--green)">📅 ' + activeDays + '</span><span class="stat-label">Aktivních dní</span></div></div><h3 class="mb-8">Umístění</h3><div class="profile-stats" style="margin-bottom:14px"><div class="profile-stat"><span class="stat-val">' + rankings.overall.medal + ' ' + rankings.overall.rank + '.</span><span class="stat-label">Celkově (z ' + rankings.overall.total + ')</span></div><div class="profile-stat"><span class="stat-val">' + rankings.group.medal + ' ' + rankings.group.rank + '.</span><span class="stat-label">' + esc(child.group) + ' (z ' + rankings.group.total + ')</span></div><div class="profile-stat"><span class="stat-val">' + rankings.subgroup.medal + ' ' + rankings.subgroup.rank + '.</span><span class="stat-label">' + esc(child.subgroup) + ' (z ' + rankings.subgroup.total + ')</span></div></div><h3 class="mb-8">Denní záznamy</h3>' + daysHtml + '</div>';
+  detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function getRankings(child, data) {
+  function calcRank(list) {
+    const sorted = list.map(c => ({ id: c.id, pts: getTotalPoints(c) })).sort((a, b) => b.pts - a.pts);
+    const rank = sorted.findIndex(c => c.id === child.id) + 1;
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅';
+    return { rank, total: sorted.length, medal };
+  }
+  return {
+    overall: calcRank(data.children),
+    group: calcRank(data.children.filter(c => c.group === child.group)),
+    subgroup: calcRank(data.children.filter(c => c.subgroup === child.subgroup))
+  };
+}
+
+function hideProfileDetail() {
+  document.getElementById('profile-detail').style.display = 'none';
+}
+
+// ============ ADMIN ============
+function renderAdmin() {
+  if (currentAdminTab === 'schedule') renderAdminSchedule();
+  else if (currentAdminTab === 'educators') renderAdminEducators();
+  else if (currentAdminTab === 'children') renderAdminChildren();
+  else if (currentAdminTab === 'stats') renderAdminStats();
+  else if (currentAdminTab === 'settings') renderAdminSettings();
+}
+
+// ---- SCHEDULE TAB ----
+function renderAdminSchedule() {
+  const data = loadData();
+  const sched = data.schedule[scheduleDate] || null;
+  const container = document.getElementById('admin-tab-schedule');
+
+  let html = '<div class="card">';
+  html += '<h2>Denní rozvrh</h2>';
+  html += '<div class="form-group"><label>Datum</label><input type="date" id="sched-date" value="' + scheduleDate + '" onchange="scheduleDate=this.value;renderAdminSchedule()"></div>';
+
+  if (sched && sched.timeSlot) {
+    html += '<div class="form-group"><label>Časový slot</label><input type="text" id="sched-timeslot" value="' + esc(sched.timeSlot) + '" placeholder="13:30–14:30"></div>';
+  } else {
+    html += '<div class="form-group"><label>Časový slot</label><input type="text" id="sched-timeslot" value="13:30–14:30" placeholder="13:30–14:30"></div>';
+  }
+
+  // Educator checkboxes
+  if (data.educators.length === 0) {
+    html += '<div class="info-box">Nejprve přidejte vychovatelky v záložce "Vychovatelky".</div>';
+  } else {
+    html += '<h3 class="mb-8">Kdo dnes pracuje?</h3>';
+    html += '<ul class="check-list" style="list-style:none;margin-bottom:16px">';
+    data.educators.forEach(edu => {
+      const isChecked = sched && sched.slots && sched.slots.some(s => s.educatorId === edu.id);
+      html += '<li><input type="checkbox" id="edu-check-' + edu.id + '" data-eduid="' + edu.id + '" ' + (isChecked ? 'checked' : '') + ' onchange="renderScheduleActivities()"><label for="edu-check-' + edu.id + '">' + esc(edu.name) + ' (' + edu.activities.length + ' aktivit)</label></li>';
+    });
+    html += '</ul>';
+
+    html += '<div id="schedule-activities-container"></div>';
+
+    // Show current signups
+    if (sched && sched.slots && sched.slots.length > 0) {
+      html += '<div class="divider"></div><h3 class="mb-8">Přehled obsazenosti</h3>';
+      sched.slots.forEach(slot => {
+        const signups = getActivitySignups(data, scheduleDate, slot.activityName);
+        const children = data.children.filter(c => {
+          const r = c.records && c.records[scheduleDate];
+          return r && r.activity && r.activity.name === slot.activityName;
+        });
+        html += '<div style="padding:8px;margin-bottom:6px;border-radius:var(--radius-sm);background:var(--gray-light)">';
+        html += '<strong>' + (slot.icon || '🏃') + ' ' + esc(slot.activityName) + '</strong> — ' + signups + '/' + slot.maxKids;
+        if (children.length > 0) {
+          html += '<div style="font-size:.8rem;color:var(--gray);margin-top:4px">' + children.map(c => esc(c.name)).join(', ') + '</div>';
+        }
+        html += '</div>';
+      });
+    }
+  }
+  html += '</div>';
+  container.innerHTML = html;
+
+  // Render activities for checked educators
+  setTimeout(renderScheduleActivities, 0);
+}
+
+function renderScheduleActivities() {
+  const data = loadData();
+  const container = document.getElementById('schedule-activities-container');
+  if (!container) return;
+
+  const checkedEduIds = [];
+  document.querySelectorAll('[data-eduid]').forEach(cb => {
+    if (cb.checked) checkedEduIds.push(cb.dataset.eduid);
+  });
+
+  if (checkedEduIds.length === 0) {
+    container.innerHTML = '<p style="color:var(--gray);font-size:.85rem">Zaškrtněte vychovatelky pro zobrazení aktivit.</p>';
+    return;
+  }
+
+  const sched = data.schedule[scheduleDate];
+  const selectedActivities = sched && sched.slots ? sched.slots.map(s => s.educatorId + '::' + s.activityName) : [];
+
+  let html = '<h3 class="mb-8">Vyberte aktivity (max 4):</h3>';
+  let hasConflict = false;
+  const selectedLocations = {};
+
+  // Gather all selected activities to check for conflicts
+  const allSlots = [];
+  checkedEduIds.forEach(eduId => {
+    const edu = data.educators.find(e => e.id === eduId);
+    if (!edu) return;
+    edu.activities.forEach(act => {
+      const key = eduId + '::' + act.name;
+      const isSelected = selectedActivities.includes(key);
+      if (isSelected) allSlots.push({ eduId, act, key });
+    });
+  });
+
+  // Check location conflicts
+  allSlots.forEach(s => {
+    if (!selectedLocations[s.act.locationId]) selectedLocations[s.act.locationId] = [];
+    selectedLocations[s.act.locationId].push(s.act.name);
+  });
+  const conflictLocations = {};
+  for (const locId in selectedLocations) {
+    if (selectedLocations[locId].length > 1) { conflictLocations[locId] = true; hasConflict = true; }
+  }
+
+  checkedEduIds.forEach(eduId => {
+    const edu = data.educators.find(e => e.id === eduId);
+    if (!edu) return;
+    html += '<div style="margin-bottom:12px"><strong>' + esc(edu.name) + '</strong>';
+    edu.activities.forEach(act => {
+      const key = eduId + '::' + act.name;
+      const isSelected = selectedActivities.includes(key);
+      const isConflict = isSelected && conflictLocations[act.locationId];
+      const locIcon = getLocationIcon(data, act.locationId);
+      const ptsColor = act.points <= 10 ? 'var(--green)' : act.points <= 20 ? 'var(--orange)' : 'var(--purple)';
+      html += '<div class="schedule-slot' + (isSelected ? ' selected' : '') + (isConflict ? ' conflict' : '') + '" onclick="toggleScheduleSlot(\'' + eduId + '\',\'' + esc(act.name).replace(/'/g, "\\'") + '\')">';
+      html += '<div class="slot-header"><span>' + (act.icon || '🏃') + ' <strong>' + esc(act.name) + '</strong> <span style="color:' + ptsColor + '">(' + act.points + 'b)</span></span>';
+      html += '<span style="font-size:.8rem">' + locIcon + ' ' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + '</span></div>';
+      if (isConflict) html += '<div class="slot-info" style="color:var(--red);font-weight:700">⚠️ Konflikt lokace!</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  if (hasConflict) {
+    html += '<div class="warning-box">⚠️ Některé aktivity sdílejí stejnou lokaci. Můžete přesto uložit, pokud je to záměr.</div>';
+  }
+
+  const totalSelected = allSlots.length;
+  if (totalSelected > 4) {
+    html += '<div class="warning-box">Více než 4 aktivity za den. Aktuálně vybráno: ' + totalSelected + '</div>';
+  }
+
+  html += '<button class="btn btn-green btn-block mt-12" onclick="saveSchedule()">Uložit rozvrh</button>';
+  if (sched && sched.slots && sched.slots.length > 0) {
+    html += '<button class="btn btn-red btn-block btn-sm mt-8" onclick="clearSchedule()">Smazat rozvrh pro tento den</button>';
+  }
+
+  container.innerHTML = html;
+}
+
+function toggleScheduleSlot(eduId, actName) {
+  const data = loadData();
+  if (!data.schedule[scheduleDate]) data.schedule[scheduleDate] = { timeSlot: '13:30–14:30', slots: [] };
+  const sched = data.schedule[scheduleDate];
+  const idx = sched.slots.findIndex(s => s.educatorId === eduId && s.activityName === actName);
+  if (idx >= 0) {
+    sched.slots.splice(idx, 1);
+  } else {
+    const edu = data.educators.find(e => e.id === eduId);
+    if (!edu) return;
+    const act = edu.activities.find(a => a.name === actName);
+    if (!act) return;
+    sched.slots.push({
+      educatorId: eduId,
+      activityName: act.name,
+      points: act.points,
+      icon: act.icon,
+      locationId: act.locationId,
+      maxKids: act.maxKids
+    });
+  }
+  saveData(data);
+  renderScheduleActivities();
+}
+
+function saveSchedule() {
+  const data = loadData();
+  const timeSlot = document.getElementById('sched-timeslot').value.trim() || '13:30–14:30';
+  if (data.schedule[scheduleDate]) {
+    data.schedule[scheduleDate].timeSlot = timeSlot;
+  }
+  saveData(data);
+  toast('Rozvrh uložen');
+  renderAdminSchedule();
+}
+
+function clearSchedule() {
+  if (!confirm('Smazat rozvrh pro ' + formatDate(scheduleDate) + '?')) return;
+  const data = loadData();
+  delete data.schedule[scheduleDate];
+  saveData(data);
+  toast('Rozvrh smazán');
+  renderAdminSchedule();
+}
+
+// ---- EDUCATORS TAB ----
+function renderAdminEducators() {
+  const data = loadData();
+  const container = document.getElementById('admin-tab-educators');
+  let html = '<div class="card"><div class="flex-between mb-8"><h2 style="margin-bottom:0">Vychovatelky</h2><button class="btn btn-sm btn-green" onclick="showAddEducator()">+ Přidat</button></div>';
+
+  if (data.educators.length === 0) {
+    html += '<div class="empty-state"><div class="empty-icon">👩‍🏫</div><p>Zatím žádné vychovatelky.</p></div>';
+  } else {
+    data.educators.forEach(edu => {
+      html += '<div class="educator-card"><div class="edu-header"><span class="edu-name">' + esc(edu.name) + ' (' + edu.activities.length + ' aktivit)</span><div style="display:flex;gap:4px"><button class="btn btn-sm btn-blue" onclick="editEducator(\'' + edu.id + '\')">Upravit</button><button class="btn btn-sm btn-red" onclick="deleteEducator(\'' + edu.id + '\')">Smazat</button></div></div>';
+      if (edu.activities.length > 0) {
+        edu.activities.forEach((act, i) => {
+          const ptsColor = act.points <= 10 ? 'var(--green)' : act.points <= 20 ? 'var(--orange)' : 'var(--purple)';
+          const locIcon = getLocationIcon(data, act.locationId);
+          html += '<div class="educator-activity"><span class="ea-info">' + (act.icon || '🏃') + ' ' + esc(act.name) + ' <span style="color:' + ptsColor + ';font-weight:700">(' + act.points + 'b)</span><br><span class="ea-meta">' + locIcon + ' ' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + ' dětí</span></span><button class="btn btn-sm btn-red" style="padding:4px 8px;font-size:.7rem" onclick="removeEducatorActivity(\'' + edu.id + '\',' + i + ')">✕</button></div>';
+        });
+      }
+      html += '<button class="btn btn-sm btn-outline mt-8" onclick="showAddActivity(\'' + edu.id + '\')">+ Přidat aktivitu</button></div>';
+    });
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function showAddEducator() {
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Přidat vychovatelku</h2><div class="form-group"><label>Jméno</label><input type="text" id="edu-name" placeholder="Jméno vychovatelky"></div><button class="btn btn-green btn-block mt-8" onclick="saveNewEducator()">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveNewEducator() {
+  const name = document.getElementById('edu-name').value.trim();
+  if (!name) { toast('Vyplňte jméno!'); return; }
+  const data = loadData();
+  data.educators.push({ id: genId(), name, activities: [] });
+  saveData(data);
+  closeModal();
+  renderAdminEducators();
+  toast('Vychovatelka přidána');
+}
+
+function editEducator(id) {
+  const data = loadData();
+  const edu = data.educators.find(e => e.id === id);
+  if (!edu) return;
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Upravit — ' + esc(edu.name) + '</h2><div class="form-group"><label>Jméno</label><input type="text" id="edu-edit-name" value="' + esc(edu.name) + '"></div><button class="btn btn-blue btn-block mt-8" onclick="saveEditEducator(\'' + id + '\')">Uložit</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveEditEducator(id) {
+  const name = document.getElementById('edu-edit-name').value.trim();
+  if (!name) { toast('Vyplňte jméno!'); return; }
+  const data = loadData();
+  const edu = data.educators.find(e => e.id === id);
+  if (edu) edu.name = name;
+  saveData(data);
+  closeModal();
+  renderAdminEducators();
+  toast('Uloženo');
+}
+
+function deleteEducator(id) {
+  if (!confirm('Smazat tuto vychovatelku?')) return;
+  const data = loadData();
+  data.educators = data.educators.filter(e => e.id !== id);
+  // Remove from schedules
+  for (const date in data.schedule) {
+    if (data.schedule[date].slots) {
+      data.schedule[date].slots = data.schedule[date].slots.filter(s => s.educatorId !== id);
+    }
+  }
+  saveData(data);
+  renderAdminEducators();
+  toast('Vychovatelka smazána');
+}
+
+function showAddActivity(eduId) {
+  const data = loadData();
+  const locOptions = data.locations.map(l => '<option value="' + l.id + '">' + l.icon + ' ' + esc(l.name) + '</option>').join('');
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Přidat aktivitu</h2><div class="form-group"><label>Název</label><input type="text" id="act-name" placeholder="Název aktivity"></div><div class="form-group"><label>Body</label><select id="act-points"><option value="10">10 bodů (lehká)</option><option value="20">20 bodů (střední)</option><option value="30">30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="act-icon" value="🏃" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="act-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="act-maxkids" value="8" min="1" max="50"></div><button class="btn btn-green btn-block mt-8" onclick="saveNewActivity(\'' + eduId + '\')">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveNewActivity(eduId) {
+  const name = document.getElementById('act-name').value.trim();
+  const points = parseInt(document.getElementById('act-points').value);
+  const icon = document.getElementById('act-icon').value.trim() || '🏃';
+  const locationId = document.getElementById('act-location').value;
+  const maxKids = parseInt(document.getElementById('act-maxkids').value) || 8;
+  if (!name) { toast('Vyplňte název!'); return; }
+  const data = loadData();
+  const edu = data.educators.find(e => e.id === eduId);
+  if (!edu) return;
+  edu.activities.push({ name, points, icon, locationId, maxKids });
+  saveData(data);
+  closeModal();
+  renderAdminEducators();
+  toast('Aktivita přidána');
+}
+
+function removeEducatorActivity(eduId, index) {
+  const data = loadData();
+  const edu = data.educators.find(e => e.id === eduId);
+  if (!edu) return;
+  edu.activities.splice(index, 1);
+  saveData(data);
+  renderAdminEducators();
+  toast('Aktivita odebrána');
+}
+
+// ---- CHILDREN TAB ----
+let adminChildFilter = 'all';
+let adminSubFilter = 'all';
+
+function renderAdminChildren() {
+  const data = loadData();
+  const container = document.getElementById('admin-tab-children');
+  let children = [...data.children];
+
+  if (adminChildFilter !== 'all') children = children.filter(c => c.group === adminChildFilter);
+  if (adminSubFilter !== 'all') children = children.filter(c => c.subgroup === adminSubFilter);
+
+  let html = '<div class="card"><div class="flex-between mb-8"><h2 style="margin-bottom:0">Děti (' + data.children.length + ')</h2><button class="btn btn-sm btn-green" onclick="showAdminAddChild()">+ Přidat</button></div>';
+
+  // Filters
+  html += '<div class="filter-bar">';
+  html += '<button class="filter-btn ' + (adminChildFilter === 'all' ? 'active' : '') + '" onclick="adminChildFilter=\'all\';renderAdminChildren()">Všechny</button>';
+  data.settings.groups.forEach(g => {
+    html += '<button class="filter-btn ' + (adminChildFilter === g ? 'active' : '') + '" onclick="adminChildFilter=\'' + esc(g) + '\';renderAdminChildren()">' + esc(g) + '</button>';
+  });
+  html += '</div>';
+  html += '<div class="filter-bar">';
+  html += '<button class="filter-btn ' + (adminSubFilter === 'all' ? 'active' : '') + '" onclick="adminSubFilter=\'all\';renderAdminChildren()">Všechny</button>';
+  data.settings.subgroups.forEach(s => {
+    html += '<button class="filter-btn ' + (adminSubFilter === s ? 'active' : '') + '" onclick="adminSubFilter=\'' + esc(s) + '\';renderAdminChildren()">' + esc(s) + '</button>';
+  });
+  html += '</div>';
+
+  if (children.length === 0) {
+    html += '<div class="empty-state"><div class="empty-icon">👶</div><p>Žádné děti.</p></div>';
+  } else {
+    children.forEach(c => {
+      const pts = getTotalPoints(c);
+      const days = Object.keys(c.records || {}).sort();
+      let daysHtml = '';
+      if (days.length > 0) {
+        daysHtml = days.map(day => {
+          const rec = c.records[day];
+          const actTag = rec.activity ? (() => {
+            const cls = rec.activity.points <= 10 ? 'tag-green' : rec.activity.points <= 20 ? 'tag-orange' : 'tag-purple';
+            return '<span class="tag ' + cls + '">' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' (+' + rec.activity.points + 'b) <span class="remove-tag" onclick="adminRemoveActivity(\'' + c.id + '\',\'' + day + '\')">✕</span></span>';
+          })() : '';
+          const kmTag = rec.km > 0 ? '<span class="tag tag-blue">' + rec.km + ' km <span class="remove-tag" onclick="adminRemoveKm(\'' + c.id + '\',\'' + day + '\')">✕</span></span>' : '';
+          if (!actTag && !kmTag) return '';
+          return '<div class="admin-day-record"><strong>' + formatDateShort(day) + '</strong> ' + actTag + ' ' + kmTag + '</div>';
+        }).filter(Boolean).join('');
+      }
+      if (!daysHtml) daysHtml = '<p style="font-size:.8rem;color:var(--gray);padding:4px 0">Žádné záznamy</p>';
+
+      html += '<details class="admin-record"><summary>' + esc(c.name) + ' — ' + esc(c.group) + '/' + esc(c.subgroup) + ' — ' + pts + 'b';
+      html += '<button class="btn btn-sm btn-red" style="float:right;padding:2px 8px;font-size:.75rem" onclick="event.stopPropagation();adminDeleteChild(\'' + c.id + '\')">Smazat</button>';
+      html += '<button class="btn btn-sm btn-blue" style="float:right;padding:2px 8px;font-size:.75rem;margin-right:4px" onclick="event.stopPropagation();adminEditChild(\'' + c.id + '\')">Upravit</button>';
+      html += '<button class="btn btn-sm btn-green" style="float:right;padding:2px 8px;font-size:.75rem;margin-right:4px" onclick="event.stopPropagation();adminAddRecord(\'' + c.id + '\')">+ Záznam</button>';
+      html += '</summary><div style="margin-top:8px">' + daysHtml + '</div></details>';
+    });
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function adminDeleteChild(id) {
+  if (!confirm('Opravdu smazat toto dítě?')) return;
+  const data = loadData();
+  data.children = data.children.filter(c => c.id !== id);
+  saveData(data);
+  renderAdminChildren();
+  toast('Dítě smazáno');
+}
+
+function adminRemoveActivity(childId, day) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === childId);
+  if (!child || !child.records[day]) return;
+  child.records[day].activity = null;
+  saveData(data);
+  renderAdminChildren();
+  toast('Aktivita odebrána');
+}
+
+function adminRemoveKm(childId, day) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === childId);
+  if (!child || !child.records[day]) return;
+  child.records[day].km = 0;
+  saveData(data);
+  renderAdminChildren();
+  toast('Kilometry odebrány');
+}
+
+function adminEditChild(id) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+  const groupOpts = data.settings.groups.map(g => '<option value="' + esc(g) + '" ' + (child.group === g ? 'selected' : '') + '>' + esc(g) + '</option>').join('');
+  const subOpts = data.settings.subgroups.map(s => '<option value="' + esc(s) + '" ' + (child.subgroup === s ? 'selected' : '') + '>' + esc(s) + '</option>').join('');
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Upravit — ' + esc(child.name) + '</h2><div class="form-group"><label>Jméno</label><input type="text" id="edit-name" value="' + esc(child.name) + '"></div><div class="form-group"><label>Věk</label><input type="number" id="edit-age" value="' + child.age + '" min="4" max="18"></div><div class="form-group"><label>Pohlaví</label><select id="edit-gender"><option value="kluk" ' + (child.gender === 'kluk' ? 'selected' : '') + '>Kluk</option><option value="holka" ' + (child.gender === 'holka' ? 'selected' : '') + '>Holka</option></select></div><div class="form-group"><label>Skupina</label><select id="edit-group">' + groupOpts + '</select></div><div class="form-group"><label>Podskupina</label><select id="edit-subgroup">' + subOpts + '</select></div><div class="form-group"><label>Nový PIN (prázdné=ponechat)</label><input type="password" id="edit-pin" placeholder="Nový PIN" maxlength="4"></div><button class="btn btn-blue btn-block mt-8" onclick="saveEditChild(\'' + id + '\')">Uložit</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveEditChild(id) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+  child.name = document.getElementById('edit-name').value.trim() || child.name;
+  child.age = parseInt(document.getElementById('edit-age').value) || child.age;
+  child.gender = document.getElementById('edit-gender').value;
+  child.group = document.getElementById('edit-group').value;
+  child.subgroup = document.getElementById('edit-subgroup').value;
+  const newPin = document.getElementById('edit-pin').value.trim();
+  if (newPin && /^\d{4}$/.test(newPin)) child.pin = newPin;
+  saveData(data);
+  closeModal();
+  renderAdminChildren();
+  toast('Uloženo');
+}
+
+function showAdminAddChild() {
+  const data = loadData();
+  const groupOpts = data.settings.groups.map(g => '<option value="' + esc(g) + '">' + esc(g) + '</option>').join('');
+  const subOpts = data.settings.subgroups.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Přidat dítě</h2><div class="form-group"><label>Jméno</label><input type="text" id="add-name" maxlength="30"></div><div class="form-group"><label>Pohlaví</label><select id="add-gender"><option value="kluk">Kluk</option><option value="holka">Holka</option></select></div><div class="form-group"><label>Věk</label><input type="number" id="add-age" min="4" max="18"></div><div class="form-group"><label>Skupina</label><select id="add-group">' + groupOpts + '</select></div><div class="form-group"><label>Podskupina</label><select id="add-subgroup">' + subOpts + '</select></div><div class="form-group"><label>PIN</label><input type="password" id="add-pin" maxlength="4" placeholder="1234"></div><button class="btn btn-green btn-block mt-8" onclick="adminSaveNewChild()">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function adminSaveNewChild() {
+  const name = document.getElementById('add-name').value.trim();
+  const gender = document.getElementById('add-gender').value;
+  const age = parseInt(document.getElementById('add-age').value);
+  const group = document.getElementById('add-group').value;
+  const subgroup = document.getElementById('add-subgroup').value;
+  const pin = document.getElementById('add-pin').value.trim();
+  if (!name) { toast('Vyplňte jméno!'); return; }
+  if (!age || age < 4 || age > 18) { toast('Věk 4–18!'); return; }
+  if (!pin || !/^\d{4}$/.test(pin)) { toast('PIN musí být 4 číslice!'); return; }
+  const data = loadData();
+  data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, records: {} });
+  saveData(data);
+  closeModal();
+  renderAdminChildren();
+  toast('Dítě přidáno');
+}
+
+function adminAddRecord(id) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+
+  // Gather all available activities from educators
+  const allActs = [];
+  data.educators.forEach(edu => {
+    edu.activities.forEach(act => {
+      allActs.push({ name: act.name, points: act.points, icon: act.icon });
+    });
+  });
+  const actOptions = allActs.length > 0
+    ? allActs.map(a => '<option value="' + esc(a.name) + '|' + a.points + '|' + (a.icon || '🏃') + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' (' + a.points + 'b)</option>').join('')
+    : '<option value="">Žádné aktivity</option>';
+
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Přidat záznam — ' + esc(child.name) + '</h2><div class="form-group"><label>Datum</label><input type="date" id="rec-date" value="' + getToday() + '"></div><div class="form-group"><label>Aktivita</label><select id="rec-activity"><option value="">-- vyberte --</option>' + actOptions + '</select></div><button class="btn btn-green btn-block mt-8" onclick="saveAdminRecord(\'' + id + '\')">Přidat aktivitu</button><div class="divider"></div><div class="form-group"><label>Kilometry</label><input type="number" id="rec-km" min="0" max="20" step="0.5" placeholder="0"></div><button class="btn btn-blue btn-block" onclick="saveAdminKm(\'' + id + '\')">Nastavit km</button><button class="btn btn-outline btn-block btn-sm mt-12" onclick="closeModal()">Zavřít</button>';
+  openModal();
+}
+
+function saveAdminRecord(id) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+  const date = document.getElementById('rec-date').value;
+  const actVal = document.getElementById('rec-activity').value;
+  if (!date || !actVal) { toast('Vyplňte datum a aktivitu!'); return; }
+  const parts = actVal.split('|');
+  const name = parts[0], pts = parseInt(parts[1]), icon = parts[2] || '🏃';
+  if (!child.records) child.records = {};
+  if (!child.records[date]) child.records[date] = { activity: null, km: 0 };
+  child.records[date].activity = { name, points: pts, icon, timestamp: 0 };
+  saveData(data);
+  renderAdminChildren();
+  toast('Záznam přidán');
+}
+
+function saveAdminKm(id) {
+  const data = loadData();
+  const child = data.children.find(c => c.id === id);
+  if (!child) return;
+  const date = document.getElementById('rec-date').value;
+  const km = parseFloat(document.getElementById('rec-km').value) || 0;
+  if (!date) { toast('Vyplňte datum!'); return; }
+  if (!child.records) child.records = {};
+  if (!child.records[date]) child.records[date] = { activity: null, km: 0 };
+  child.records[date].km = km;
+  saveData(data);
+  renderAdminChildren();
+  toast('Kilometry nastaveny');
+}
+
+// ---- STATS TAB ----
+function renderAdminStats() {
+  const data = loadData();
+  const container = document.getElementById('admin-tab-stats');
+  const totalChildren = data.children.length;
+  let totalPts = 0, totalActiveDays = 0, totalKm = 0;
+  const activityCounts = {};
+  const dailyPoints = {};
+
+  data.children.forEach(child => {
+    if (!child.records) return;
+    for (const day in child.records) {
+      const r = child.records[day];
+      let dayPts = 0;
+      if (r.activity) {
+        dayPts += r.activity.points;
+        const aName = r.activity.name;
+        activityCounts[aName] = (activityCounts[aName] || 0) + 1;
+      }
+      if (r.activities) r.activities.forEach(a => {
+        dayPts += a.points;
+        activityCounts[a.name] = (activityCounts[a.name] || 0) + 1;
+      });
+      if (r.km) { dayPts += r.km; totalKm += r.km; }
+      if (dayPts > 0) {
+        totalActiveDays++;
+        totalPts += dayPts;
+        dailyPoints[day] = (dailyPoints[day] || 0) + dayPts;
+      }
+    }
+  });
+
+  let html = '<div class="card"><h2>Statistiky</h2>';
+  html += '<div class="stat-grid"><div class="stat-card" style="background:var(--blue-light)"><span class="stat-num" style="color:var(--blue)">' + totalChildren + '</span><span class="stat-lbl">Dětí</span></div><div class="stat-card" style="background:var(--green-light)"><span class="stat-num" style="color:var(--green)">' + totalActiveDays + '</span><span class="stat-lbl">Aktivních zápisů</span></div><div class="stat-card" style="background:var(--orange-light)"><span class="stat-num" style="color:var(--orange)">' + totalPts + '</span><span class="stat-lbl">Celkem bodů</span></div><div class="stat-card" style="background:var(--purple-light)"><span class="stat-num" style="color:var(--purple)">' + totalKm + '</span><span class="stat-lbl">Celkem km</span></div></div>';
+
+  // Daily points chart
+  const sortedDays = Object.keys(dailyPoints).sort();
+  if (sortedDays.length > 0) {
+    html += '<h3 class="mb-8">Body za den</h3>';
+    const maxDayPts = Math.max(...sortedDays.map(d => dailyPoints[d]));
+    const chartW = 560, chartH = 150, barW = Math.max(8, Math.min(30, (chartW - 40) / sortedDays.length - 2));
+    let svg = '<svg viewBox="0 0 ' + chartW + ' ' + (chartH + 30) + '" style="width:100%;height:auto;display:block">';
+    svg += '<line x1="30" y1="0" x2="30" y2="' + chartH + '" stroke="#eee" stroke-width="1"/>';
+    svg += '<line x1="30" y1="' + chartH + '" x2="' + chartW + '" y2="' + chartH + '" stroke="#eee" stroke-width="1"/>';
+    sortedDays.forEach((day, i) => {
+      const val = dailyPoints[day];
+      const h = Math.max(2, (val / maxDayPts) * (chartH - 10));
+      const x = 35 + i * (barW + 2);
+      const y = chartH - h;
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" rx="2" fill="#2196F3"/>';
+      if (sortedDays.length <= 15) {
+        svg += '<text x="' + (x + barW / 2) + '" y="' + (chartH + 14) + '" text-anchor="middle" font-size="8" fill="#757575">' + day.slice(8) + '.' + day.slice(5, 7) + '</text>';
+      }
+      svg += '<text x="' + (x + barW / 2) + '" y="' + (y - 2) + '" text-anchor="middle" font-size="7" fill="#333">' + val + '</text>';
+    });
+    svg += '</svg>';
+    html += svg;
+  }
+
+  // Group comparison
+  html += '<div class="divider"></div><h3 class="mb-8">Porovnání skupin</h3>';
+  html += '<div class="group-comparison">';
+  data.settings.groups.forEach(g => {
+    const members = data.children.filter(c => c.group === g);
+    const total = members.reduce((s, c) => s + getTotalPoints(c), 0);
+    const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
+    html += '<div class="group-card" style="background:var(--gray-light)"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+  });
+  html += '</div>';
+
+  // Subgroup comparison
+  html += '<h3 class="mb-8">Porovnání podskupin</h3>';
+  html += '<div class="group-comparison" style="grid-template-columns:repeat(' + Math.min(data.settings.subgroups.length, 3) + ',1fr)">';
+  data.settings.subgroups.forEach(s => {
+    const members = data.children.filter(c => c.subgroup === s);
+    const total = members.reduce((sum, c) => sum + getTotalPoints(c), 0);
+    const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
+    html += '<div class="group-card" style="background:var(--gray-light)"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+  });
+  html += '</div>';
+
+  // Popular activities
+  const sortedActs = Object.entries(activityCounts).sort((a, b) => b[1] - a[1]);
+  if (sortedActs.length > 0) {
+    html += '<div class="divider"></div><h3 class="mb-8">Nejoblíbenější aktivity</h3>';
+    sortedActs.slice(0, 10).forEach(([name, count], i) => {
+      html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:.9rem"><span>' + (i + 1) + '. ' + esc(name) + '</span><strong>' + count + '×</strong></div>';
+    });
+  }
+
+  html += '<div class="divider"></div><button class="btn btn-orange btn-block" onclick="exportData()">📥 Export dat (JSON)</button>';
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function exportData() {
+  const data = loadData();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kretin_v2_' + getToday() + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Data exportována');
+}
+
+// ---- SETTINGS TAB ----
+function renderAdminSettings() {
+  const data = loadData();
+  const container = document.getElementById('admin-tab-settings');
+
+  let html = '<div class="card"><h2>Nastavení</h2>';
+
+  // Locations
+  html += '<h3 class="mb-8">Lokace</h3>';
+  data.locations.forEach((loc, i) => {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>' + loc.icon + ' ' + esc(loc.name) + '</span><button class="btn btn-sm btn-red" style="padding:2px 8px;font-size:.7rem" onclick="removeLocation(' + i + ')">✕</button></div>';
+  });
+  html += '<div class="flex-between mt-8"><input type="text" id="new-loc-icon" placeholder="🏠" style="width:50px;padding:8px;border:2px solid #E0E0E0;border-radius:var(--radius-sm);text-align:center" maxlength="4"><input type="text" id="new-loc-name" placeholder="Název lokace" style="flex:1;margin:0 8px;padding:8px;border:2px solid #E0E0E0;border-radius:var(--radius-sm)"><button class="btn btn-sm btn-green" onclick="addLocation()">+</button></div>';
+
+  html += '<div class="divider"></div>';
+
+  // Groups
+  html += '<h3 class="mb-8">Skupiny</h3>';
+  data.settings.groups.forEach((g, i) => {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>' + esc(g) + '</span><button class="btn btn-sm btn-red" style="padding:2px 8px;font-size:.7rem" onclick="removeGroup(' + i + ')">✕</button></div>';
+  });
+  html += '<div class="flex-between mt-8"><input type="text" id="new-group" placeholder="Nová skupina" style="flex:1;margin-right:8px;padding:8px;border:2px solid #E0E0E0;border-radius:var(--radius-sm)"><button class="btn btn-sm btn-green" onclick="addGroup()">+</button></div>';
+
+  html += '<div class="divider"></div>';
+
+  // Subgroups
+  html += '<h3 class="mb-8">Podskupiny</h3>';
+  data.settings.subgroups.forEach((s, i) => {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>' + esc(s) + '</span><button class="btn btn-sm btn-red" style="padding:2px 8px;font-size:.7rem" onclick="removeSubgroup(' + i + ')">✕</button></div>';
+  });
+  html += '<div class="flex-between mt-8"><input type="text" id="new-subgroup" placeholder="Nová podskupina" style="flex:1;margin-right:8px;padding:8px;border:2px solid #E0E0E0;border-radius:var(--radius-sm)"><button class="btn btn-sm btn-green" onclick="addSubgroup()">+</button></div>';
+
+  html += '<div class="divider"></div>';
+
+  // Admin password
+  html += '<h3 class="mb-8">Admin heslo</h3>';
+  html += '<div class="form-group"><input type="password" id="new-admin-pass" placeholder="Nové heslo" value="' + esc(data.settings.adminPassword) + '"></div>';
+  html += '<button class="btn btn-sm btn-blue mb-16" onclick="saveAdminPassword()">Změnit heslo</button>';
+
+  // KM cutoff
+  html += '<h3 class="mb-8">Uzávěrka km</h3>';
+  html += '<div class="form-group"><label>Hodina uzávěrky (0–23)</label><input type="number" id="km-cutoff" value="' + data.settings.kmCutoffHour + '" min="0" max="23"></div>';
+  html += '<button class="btn btn-sm btn-blue mb-16" onclick="saveKmCutoff()">Uložit</button>';
+
+  // Cancel window
+  html += '<h3 class="mb-8">Okno na opravu aktivity</h3>';
+  html += '<div class="form-group"><label>Minuty</label><input type="number" id="cancel-window" value="' + data.settings.cancelWindowMinutes + '" min="5" max="1440"></div>';
+  html += '<button class="btn btn-sm btn-blue" onclick="saveCancelWindow()">Uložit</button>';
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function addLocation() {
+  const icon = document.getElementById('new-loc-icon').value.trim() || '📍';
+  const name = document.getElementById('new-loc-name').value.trim();
+  if (!name) { toast('Vyplňte název!'); return; }
+  const data = loadData();
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  data.locations.push({ id, name, icon });
+  saveData(data);
+  renderAdminSettings();
+  toast('Lokace přidána');
+}
+
+function removeLocation(i) {
+  const data = loadData();
+  if (data.locations.length <= 1) { toast('Musí zůstat alespoň 1 lokace!'); return; }
+  data.locations.splice(i, 1);
+  saveData(data);
+  renderAdminSettings();
+  toast('Lokace odebrána');
+}
+
+function addGroup() {
+  const name = document.getElementById('new-group').value.trim();
+  if (!name) { toast('Vyplňte název!'); return; }
+  const data = loadData();
+  if (data.settings.groups.includes(name)) { toast('Skupina již existuje!'); return; }
+  data.settings.groups.push(name);
+  saveData(data);
+  renderAdminSettings();
+  toast('Skupina přidána');
+}
+
+function removeGroup(i) {
+  const data = loadData();
+  if (data.settings.groups.length <= 1) { toast('Musí zůstat alespoň 1 skupina!'); return; }
+  data.settings.groups.splice(i, 1);
+  saveData(data);
+  renderAdminSettings();
+  toast('Skupina odebrána');
+}
+
+function addSubgroup() {
+  const name = document.getElementById('new-subgroup').value.trim();
+  if (!name) { toast('Vyplňte název!'); return; }
+  const data = loadData();
+  if (data.settings.subgroups.includes(name)) { toast('Podskupina již existuje!'); return; }
+  data.settings.subgroups.push(name);
+  saveData(data);
+  renderAdminSettings();
+  toast('Podskupina přidána');
+}
+
+function removeSubgroup(i) {
+  const data = loadData();
+  if (data.settings.subgroups.length <= 1) { toast('Musí zůstat alespoň 1 podskupina!'); return; }
+  data.settings.subgroups.splice(i, 1);
+  saveData(data);
+  renderAdminSettings();
+  toast('Podskupina odebrána');
+}
+
+function saveAdminPassword() {
+  const pass = document.getElementById('new-admin-pass').value.trim();
+  if (!pass) { toast('Heslo nesmí být prázdné!'); return; }
+  const data = loadData();
+  data.settings.adminPassword = pass;
+  saveData(data);
+  toast('Heslo změněno');
+}
+
+function saveKmCutoff() {
+  const val = parseInt(document.getElementById('km-cutoff').value);
+  if (isNaN(val) || val < 0 || val > 23) { toast('Hodina 0–23!'); return; }
+  const data = loadData();
+  data.settings.kmCutoffHour = val;
+  saveData(data);
+  toast('Uzávěrka uložena');
+}
+
+function saveCancelWindow() {
+  const val = parseInt(document.getElementById('cancel-window').value);
+  if (isNaN(val) || val < 5) { toast('Min 5 minut!'); return; }
+  const data = loadData();
+  data.settings.cancelWindowMinutes = val;
+  saveData(data);
+  toast('Okno uloženo');
+}
+
+// ============ INIT ============
+(async function init() {
+  // Load from localStorage first (fast)
+  if (!localStorage.getItem('kretin_v2')) {
+    _cache = JSON.parse(JSON.stringify(DEFAULT_DATA));
+    localStorage.setItem('kretin_v2', JSON.stringify(_cache));
+  }
+
+  // Sync from Supabase (async)
+  const synced = await syncFromSupabase();
+  if (!synced) {
+    // First run: push local data to Supabase
+    pushToSupabase(loadData());
+  }
+
+  // Realtime: when someone else saves, update local cache
+  sb.channel('app_state_sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, payload => {
+      if (payload.new && payload.new.data) {
+        const d = migrateData(payload.new.data);
+        _cache = d;
+        localStorage.setItem('kretin_v2', JSON.stringify(d));
+        refreshCurrentScreen();
+      }
+    })
+    .subscribe();
+
+  // Click outside modal to close
+  document.getElementById('modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+})();
+</script>
+</body>
+</html>
