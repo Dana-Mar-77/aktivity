@@ -160,6 +160,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .empty-state{text-align:center;padding:24px;color:var(--gray);font-size:.9rem}
 .empty-state .empty-icon{font-size:2.5rem;margin-bottom:8px}
 .divider{height:1px;background:#eee;margin:12px 0}
+.overview-slot{padding:12px;margin-bottom:10px;border-radius:var(--radius-sm);background:var(--white);border-left:4px solid var(--gray)}
+.overview-slot.pts-10{border-left-color:var(--green)}.overview-slot.pts-20{border-left-color:var(--orange)}.overview-slot.pts-30{border-left-color:var(--purple)}
+.overview-slot-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.overview-slot-header strong{font-size:.9rem}
+.overview-slot-count{font-size:.8rem;font-weight:700;color:var(--green)}.overview-slot-count.full{color:var(--red)}
+.overview-slot-edu{font-size:.8rem;color:var(--gray);margin-bottom:6px}
+.overview-children{display:flex;flex-wrap:wrap;gap:8px}
+.overview-child{display:flex;flex-direction:column;align-items:center;gap:2px;width:48px}
+.overview-child .avatar{width:28px;height:28px;font-size:.8rem}
+.overview-child .avatar img{width:100%;height:100%;object-fit:cover}
+.overview-child span{font-size:.6rem;text-align:center;line-height:1.1;word-break:break-word;max-width:48px}
+.overview-unsigned{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px}
 .sub-filter-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .admin-record{margin-bottom:10px;padding:12px;border-radius:var(--radius-sm);background:var(--gray-light)}
 .admin-record summary{font-weight:600;cursor:pointer;padding:4px 0}
@@ -361,7 +373,7 @@ const DEFAULT_DATA = {
   settings: {
     adminPassword: "kretin2026",
     kmCutoffHour: 21,
-    cancelWindowMinutes: 60,
+    cancelBeforeStartMinutes: 30,
     groups: ["Hvězdičky", "Sluníčka"],
     subgroups: ["Žraloci", "Kosatky", "Krokodýli"],
     programStart: "2026-03-03",
@@ -428,6 +440,8 @@ function migrateData(d) {
     }
   });
 
+  if (!d.settings.cancelBeforeStartMinutes) d.settings.cancelBeforeStartMinutes = 30;
+  if (d.settings.cancelWindowMinutes) delete d.settings.cancelWindowMinutes;
   if (!d.settings.programStart) d.settings.programStart = "2026-03-03";
   if (!d.settings.programEnd) d.settings.programEnd = "2026-03-31";
 
@@ -566,6 +580,13 @@ function getEducatorName(data, eduId) {
 
 function getActivity(data, actId) {
   return data.activities.find(a => a.id === actId);
+}
+
+function parseTimeSlotStart(timeSlot) {
+  if (!timeSlot) return null;
+  const m = timeSlot.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return { hours: parseInt(m[1]), minutes: parseInt(m[2]) };
 }
 
 // ============ STATE ============
@@ -774,7 +795,7 @@ function renderDashboard() {
   const empty = document.getElementById('dash-today-empty');
   const items = [];
   if (rec.activity) {
-    const canRemove = isCancellable(rec.activity, data);
+    const canRemove = isCancellable(rec.activity, data, today);
     const removeBtn = canRemove
       ? '<button class="remove-btn" onclick="removeTodayActivity()" title="Odebrat">✕</button>'
       : '<span style="font-size:.7rem;color:var(--gray)">🔒</span>';
@@ -825,7 +846,7 @@ function removeTodayActivity() {
   if (!child) return;
   const rec = getTodayRecord(child);
   if (!rec.activity) return;
-  if (!isCancellable(rec.activity, data)) { toast('Čas na změnu vypršel'); return; }
+  if (!isCancellable(rec.activity, data, getToday())) { toast('Čas na změnu vypršel'); return; }
   const name = rec.activity.name;
   rec.activity = null;
   saveData(data);
@@ -854,16 +875,28 @@ function getScheduledDates(data) {
   return dates;
 }
 
-function isCancellable(activity, data) {
-  if (!activity || !activity.timestamp) return false;
-  const window = (data.settings.cancelWindowMinutes || 60) * 60 * 1000;
-  return (Date.now() - activity.timestamp) < window;
+function isCancellable(activity, data, date) {
+  if (!activity) return false;
+  const sched = date && data.schedule[date];
+  const ts = sched && sched.timeSlot ? parseTimeSlotStart(sched.timeSlot) : null;
+  if (!ts) return true; // no schedule/timeSlot → always cancellable
+  const beforeMin = data.settings.cancelBeforeStartMinutes || 30;
+  const startTime = new Date(date + 'T00:00:00');
+  startTime.setHours(ts.hours, ts.minutes, 0, 0);
+  const deadline = startTime.getTime() - beforeMin * 60000;
+  return Date.now() < deadline;
 }
 
-function getCancelMinutesLeft(activity, data) {
-  if (!activity || !activity.timestamp) return 0;
-  const window = (data.settings.cancelWindowMinutes || 60) * 60 * 1000;
-  return Math.max(0, Math.ceil((window - (Date.now() - activity.timestamp)) / 60000));
+function getCancelMinutesLeft(activity, data, date) {
+  if (!activity) return 0;
+  const sched = date && data.schedule[date];
+  const ts = sched && sched.timeSlot ? parseTimeSlotStart(sched.timeSlot) : null;
+  if (!ts) return 999;
+  const beforeMin = data.settings.cancelBeforeStartMinutes || 30;
+  const startTime = new Date(date + 'T00:00:00');
+  startTime.setHours(ts.hours, ts.minutes, 0, 0);
+  const deadline = startTime.getTime() - beforeMin * 60000;
+  return Math.max(0, Math.ceil((deadline - Date.now()) / 60000));
 }
 
 function renderActivities() {
@@ -895,7 +928,7 @@ function renderActivities() {
   const selDate = activityDate;
   const rec = getRecord(child, selDate);
   const dateActivity = rec.activity;
-  const canCancel = dateActivity && isCancellable(dateActivity, data);
+  const canCancel = dateActivity && isCancellable(dateActivity, data, selDate);
   const sched = data.schedule[selDate];
   const isToday = selDate === today;
 
@@ -914,8 +947,8 @@ function renderActivities() {
   let infoHtml = dateTabsHtml;
   if (dateActivity) {
     if (canCancel) {
-      const mins = getCancelMinutesLeft(dateActivity, data);
-      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + 'b)<br><small style="font-weight:400">Můžeš změnit ještě ' + mins + ' min — klikni na aktivitu pro zrušení</small></div>';
+      const mins = getCancelMinutesLeft(dateActivity, data, selDate);
+      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + 'b)<br><small style="font-weight:400">Můžeš změnit do ' + mins + ' min před začátkem — klikni na aktivitu pro zrušení</small></div>';
     } else {
       infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + 'b)<br><small style="font-weight:400;color:var(--gray)">Aktivita je uzamčena</small></div>';
     }
@@ -996,7 +1029,7 @@ function cancelActivity() {
   if (!child) return;
   const rec = getRecord(child, activityDate);
   if (!rec.activity) return;
-  if (!isCancellable(rec.activity, data)) { toast('Čas na změnu vypršel'); return; }
+  if (!isCancellable(rec.activity, data, activityDate)) { toast('Čas na změnu vypršel'); return; }
   const name = rec.activity.name;
   rec.activity = null;
   saveData(data);
@@ -1347,9 +1380,10 @@ function renderAdminSchedule() {
       html += '<button class="btn btn-red btn-block btn-sm mt-8" onclick="clearSchedule()">Smazat rozvrh pro tento den</button>';
     }
 
-    // Show current signups
+    // Show current signups — detailed overview
     if (sched && sched.slots && sched.slots.length > 0) {
       html += '<div class="divider"></div><h3 class="mb-8">Přehled obsazenosti</h3>';
+      const signedUpIds = new Set();
       sched.slots.forEach(slot => {
         const act = getActivity(data, slot.activityId);
         const actName = act ? act.name : '?';
@@ -1358,13 +1392,36 @@ function renderAdminSchedule() {
           const r = c.records && c.records[scheduleDate];
           return r && r.activity && r.activity.activityId === slot.activityId;
         });
-        html += '<div style="padding:8px;margin-bottom:6px;border-radius:var(--radius-sm);background:var(--gray-light)">';
-        html += '<strong>' + (slot.icon || '🏃') + ' ' + esc(actName) + '</strong> — ' + signups + '/' + slot.maxKids;
+        children.forEach(c => signedUpIds.add(c.id));
+        const ptsClass = slot.points <= 10 ? 'pts-10' : slot.points <= 20 ? 'pts-20' : 'pts-30';
+        const fullCls = signups >= slot.maxKids ? ' full' : '';
+        html += '<div class="overview-slot ' + ptsClass + '">';
+        html += '<div class="overview-slot-header"><strong>' + (slot.icon || '🏃') + ' ' + esc(actName) + '</strong>';
+        html += '<span class="overview-slot-count' + fullCls + '">' + signups + '/' + slot.maxKids + '</span></div>';
+        html += '<div class="overview-slot-edu">👩‍🏫 ' + esc(getEducatorName(data, slot.educatorId)) + '</div>';
         if (children.length > 0) {
-          html += '<div style="font-size:.8rem;color:var(--gray);margin-top:4px">' + children.map(c => esc(c.name)).join(', ') + '</div>';
+          html += '<div class="overview-children">';
+          children.forEach(c => {
+            const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
+            html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+          });
+          html += '</div>';
+        } else {
+          html += '<div style="font-size:.8rem;color:var(--gray)">Zatím nikdo</div>';
         }
         html += '</div>';
       });
+      // Unsigned children
+      const unsigned = data.children.filter(c => !signedUpIds.has(c.id));
+      if (unsigned.length > 0) {
+        html += '<div style="margin-top:12px"><h3 style="color:var(--red);margin-bottom:8px">Bez aktivity (' + unsigned.length + ')</h3>';
+        html += '<div class="overview-unsigned">';
+        unsigned.forEach(c => {
+          const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
+          html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+        });
+        html += '</div></div>';
+      }
     }
   }
   html += '</div>';
@@ -2012,10 +2069,10 @@ function renderAdminSettings() {
   html += '<div class="form-group"><label>Hodina uzávěrky (0–23)</label><input type="number" id="km-cutoff" value="' + data.settings.kmCutoffHour + '" min="0" max="23"></div>';
   html += '<button class="btn btn-sm btn-blue mb-16" onclick="saveKmCutoff()">Uložit</button>';
 
-  // Cancel window
-  html += '<h3 class="mb-8">Okno na opravu aktivity</h3>';
-  html += '<div class="form-group"><label>Minuty</label><input type="number" id="cancel-window" value="' + data.settings.cancelWindowMinutes + '" min="5" max="1440"></div>';
-  html += '<button class="btn btn-sm btn-blue" onclick="saveCancelWindow()">Uložit</button>';
+  // Cancel before start
+  html += '<h3 class="mb-8">Uzávěrka na změnu aktivity</h3>';
+  html += '<div class="form-group"><label>Minut před začátkem aktivity</label><input type="number" id="cancel-before-start" value="' + (data.settings.cancelBeforeStartMinutes || 30) + '" min="5" max="1440"></div>';
+  html += '<button class="btn btn-sm btn-blue" onclick="saveCancelBeforeStart()">Uložit</button>';
 
   html += '</div>';
   container.innerHTML = html;
@@ -2100,13 +2157,13 @@ function saveKmCutoff() {
   toast('Uzávěrka uložena');
 }
 
-function saveCancelWindow() {
-  const val = parseInt(document.getElementById('cancel-window').value);
+function saveCancelBeforeStart() {
+  const val = parseInt(document.getElementById('cancel-before-start').value);
   if (isNaN(val) || val < 5) { toast('Min 5 minut!'); return; }
   const data = loadData();
-  data.settings.cancelWindowMinutes = val;
+  data.settings.cancelBeforeStartMinutes = val;
   saveData(data);
-  toast('Okno uloženo');
+  toast('Uzávěrka uložena');
 }
 
 // ============ INIT ============
