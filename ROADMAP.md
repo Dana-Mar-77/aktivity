@@ -38,7 +38,7 @@ aktivity/
 - [x] **Profily** — beze změny
 
 ### Admin panel (6 záložek)
-- [x] **Denní rozvrh** — výběr data, výběr vychovatelek, výběr aktivit, kontrola konfliktu lokací (neblokující), přehled obsazenosti
+- [x] **Program** — přehled celého běhu (programStart/programEnd), denní dlaždice ve dvou variantách (scrollovací pás / mřížka), výběr dne kliknutím, detail dne s výběrem vychovatelek, inline chipy aktivit, kontrola konfliktu lokací, přehled obsazenosti, širší admin layout (960px)
 - [ ] **Aktivity** — globální katalog aktivit (název, body, ikona, lokace, max dětí), sdílený mezi vychovatelkami
 - [x] **Vychovatelky** — CRUD vychovatelek, přiřazení aktivit z katalogu (chipy místo checkboxů, seskupené podle bodů)
 - [x] **Správa dětí** — seznam, přidání/úprava/smazání, zpětné zapisování záznamů
