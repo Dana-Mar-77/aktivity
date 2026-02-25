@@ -38,7 +38,7 @@ aktivity/
 - [x] **Profily** — beze změny
 
 ### Admin panel (6 záložek)
-- [x] **Program** — přehled celého běhu (programStart/programEnd), denní dlaždice ve dvou variantách (scrollovací pás / mřížka), výběr dne kliknutím, detail dne s výběrem vychovatelek, inline chipy aktivit, kontrola konfliktu lokací, přehled obsazenosti, širší admin layout (960px)
+- [x] **Program** — přehled celého běhu (programStart/programEnd), denní dlaždice ve dvou variantách (scrollovací pás / mřížka), výběr dne kliknutím, detail dne s výběrem vychovatelek, inline chipy aktivit, kontrola konfliktu lokací, detailní přehled obsazenosti (aktivita + vychovatelka + přihlášené děti s avatary + nepřihlášené děti), širší admin layout (960px)
 - [ ] **Aktivity** — globální katalog aktivit (název, body, ikona, lokace, max dětí), sdílený mezi vychovatelkami
 - [x] **Vychovatelky** — CRUD vychovatelek, přiřazení aktivit z katalogu (chipy místo checkboxů, seskupené podle bodů)
 - [x] **Správa dětí** — seznam, přidání/úprava/smazání, zpětné zapisování záznamů
@@ -52,7 +52,7 @@ aktivity/
 
 ### Klíčová pravidla
 - 1 aktivita denně (z rozvrhu)
-- 60 min na opravu (konfigurovatelné)
+- Změna aktivity nejpozději 30 min před začátkem (dle timeSlotu v rozvrhu, konfigurovatelné)
 - Km uzávěrka ve 21:00 (konfigurovatelné)
 - Kontrola konfliktu lokací (varování, neblokuje)
 - Kapacitní limit — plné aktivity nelze vybrat
