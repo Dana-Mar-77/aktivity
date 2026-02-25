@@ -1983,7 +1983,9 @@ function saveCancelWindow() {
 
   // Sync from Supabase (async)
   const synced = await syncFromSupabase();
-  if (!synced) {
+  if (synced) {
+    refreshCurrentScreen();
+  } else {
     // First run: push local data to Supabase
     pushToSupabase(loadData());
   }
