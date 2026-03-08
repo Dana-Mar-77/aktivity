@@ -357,6 +357,7 @@ const SUPABASE_KEY = 'sb_publishable_qs3liD4kaOecwWIbpAY6Tw_dD10VaC5';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let _cache = null;
 let _syncing = false;
+let _pendingPush = null; // queue for next push when _syncing is true
 
 // ============ DATA MODEL ============
 const DEFAULT_DATA = {
@@ -460,18 +461,98 @@ function loadData() {
 }
 
 function saveData(data) {
+  data._localVersion = (data._localVersion || 0) + 1;
   _cache = data;
   localStorage.setItem('kretin_v2', JSON.stringify(data));
   pushToSupabase(data);
 }
 
 async function pushToSupabase(data) {
-  if (_syncing) return;
+  if (_syncing) {
+    // Queue this data — only keep the latest pending push
+    _pendingPush = JSON.parse(JSON.stringify(data));
+    return;
+  }
   _syncing = true;
   try {
     await sb.from('app_state').upsert({ id: 1, data: data, updated_at: new Date().toISOString() });
   } catch (e) { console.error('Supabase push:', e); }
   _syncing = false;
+  // Process queued push if any
+  if (_pendingPush) {
+    const pending = _pendingPush;
+    _pendingPush = null;
+    pushToSupabase(pending);
+  }
+}
+
+// Deep merge: merge remote data INTO local, keeping newer child records
+function mergeData(local, remote) {
+  if (!local || !local.children || local.children.length === 0) return remote;
+  if (!remote || !remote.children) return local;
+  const merged = JSON.parse(JSON.stringify(remote));
+  // Build lookup of remote children by id
+  const remoteMap = {};
+  (merged.children || []).forEach(c => { remoteMap[c.id] = c; });
+  // Merge each local child's records into remote
+  (local.children || []).forEach(localChild => {
+    const remoteChild = remoteMap[localChild.id];
+    if (!remoteChild) {
+      // Child exists locally but not remotely — keep it
+      merged.children.push(JSON.parse(JSON.stringify(localChild)));
+      return;
+    }
+    // Merge records: for each date, keep the one with more data / newer timestamp
+    if (!localChild.records) return;
+    if (!remoteChild.records) remoteChild.records = {};
+    for (const date in localChild.records) {
+      const lr = localChild.records[date];
+      const rr = remoteChild.records[date];
+      if (!rr) {
+        // Date exists only locally — keep local
+        remoteChild.records[date] = JSON.parse(JSON.stringify(lr));
+        continue;
+      }
+      // Merge activity: respect timestamps and cancellations
+      const lCancelled = lr.activityCancelledAt || 0;
+      const rCancelled = rr.activityCancelledAt || 0;
+      const lActTs = lr.activity ? (lr.activity.timestamp || 0) : 0;
+      const rActTs = rr.activity ? (rr.activity.timestamp || 0) : 0;
+      // Find the latest event (activity set or cancelled)
+      const lLatest = Math.max(lActTs, lCancelled);
+      const rLatest = Math.max(rActTs, rCancelled);
+      if (lLatest > rLatest) {
+        // Local is newer — use local state
+        rr.activity = lr.activity ? JSON.parse(JSON.stringify(lr.activity)) : null;
+        if (lr.activityCancelledAt) rr.activityCancelledAt = lr.activityCancelledAt;
+      } else if (lLatest === rLatest && lLatest > 0) {
+        // Same timestamp — keep whichever has data
+        if (lr.activity && !rr.activity) {
+          rr.activity = JSON.parse(JSON.stringify(lr.activity));
+        }
+      }
+      // If both are 0 (no timestamp), keep whatever remote has (or local if remote empty)
+      if (lLatest === 0 && rLatest === 0 && lr.activity && !rr.activity) {
+        rr.activity = JSON.parse(JSON.stringify(lr.activity));
+      }
+      // Merge km: use timestamp if available, otherwise keep higher value
+      const lkmt = lr.kmTimestamp || 0;
+      const rkmt = rr.kmTimestamp || 0;
+      if (lkmt > rkmt) {
+        rr.km = lr.km;
+        rr.kmTimestamp = lr.kmTimestamp;
+      } else if (lkmt === rkmt && (lr.km || 0) > (rr.km || 0)) {
+        rr.km = lr.km;
+      }
+    }
+    // Preserve local child's photo if remote doesn't have it
+    if (localChild.photo && !remoteChild.photo) {
+      remoteChild.photo = localChild.photo;
+    }
+  });
+  // Also add children that exist remotely but not locally (new registrations from other devices)
+  // (already in merged from remote, nothing to do)
+  return merged;
 }
 
 async function syncFromSupabase() {
@@ -479,7 +560,10 @@ async function syncFromSupabase() {
     const { data: row, error } = await sb.from('app_state').select('data').eq('id', 1).single();
     if (error) throw error;
     if (row && row.data && (row.data.children || row.data.settings)) {
-      const d = migrateData(row.data);
+      const remote = migrateData(row.data);
+      const local = _cache || (() => { try { return migrateData(JSON.parse(localStorage.getItem('kretin_v2'))); } catch { return null; } })();
+      // Merge instead of overwrite
+      const d = mergeData(local, remote);
       _cache = d;
       localStorage.setItem('kretin_v2', JSON.stringify(d));
       return true;
@@ -1067,6 +1151,7 @@ function cancelActivity() {
   if (!isCancellable(rec.activity, data, activityDate)) { toast('Čas na změnu vypršel'); return; }
   const name = rec.activity.name;
   rec.activity = null;
+  rec.activityCancelledAt = Date.now();
   saveData(data);
   renderActivities();
   toast('Zrušeno: ' + name + ' — vyber jinou');
@@ -1127,6 +1212,7 @@ function saveKm() {
   const rec = getTodayRecord(child);
   const val = parseFloat(document.getElementById('km-slider').value);
   rec.km = val;
+  rec.kmTimestamp = Date.now();
   saveData(data);
   document.getElementById('km-today-saved').textContent = val;
   toast('Uloženo: ' + val + ' km (+' + val + 'b)');
@@ -1898,6 +1984,7 @@ function adminRemoveActivity(childId, day) {
   const child = data.children.find(c => c.id === childId);
   if (!child || !child.records[day]) return;
   child.records[day].activity = null;
+  child.records[day].activityCancelledAt = Date.now();
   saveData(data);
   renderAdminChildren();
   toast('Aktivita odebrána');
@@ -1908,6 +1995,7 @@ function adminRemoveKm(childId, day) {
   const child = data.children.find(c => c.id === childId);
   if (!child || !child.records[day]) return;
   child.records[day].km = 0;
+  child.records[day].kmTimestamp = Date.now();
   saveData(data);
   renderAdminChildren();
   toast('Kilometry odebrány');
@@ -2015,7 +2103,7 @@ function saveAdminRecord(id) {
   if (!act) { toast('Aktivita nenalezena!'); return; }
   if (!child.records) child.records = {};
   if (!child.records[date]) child.records[date] = { activity: null, km: 0 };
-  child.records[date].activity = { activityId: act.id, name: act.name, points: act.points, icon: act.icon, timestamp: 0 };
+  child.records[date].activity = { activityId: act.id, name: act.name, points: act.points, icon: act.icon, timestamp: Date.now() };
   saveData(data);
   renderAdminChildren();
   toast('Záznam přidán');
@@ -2031,6 +2119,7 @@ function saveAdminKm(id) {
   if (!child.records) child.records = {};
   if (!child.records[date]) child.records[date] = { activity: null, km: 0 };
   child.records[date].km = km;
+  child.records[date].kmTimestamp = Date.now();
   saveData(data);
   renderAdminChildren();
   toast('Kilometry nastaveny');
@@ -2293,16 +2382,17 @@ function saveCancelBeforeStart() {
     localStorage.setItem('kretin_v2', JSON.stringify(_cache));
   }
 
-  // Sync from Supabase (async)
+  // Sync from Supabase (async) — uses merge, never overwrites local data blindly
   const synced = await syncFromSupabase();
   if (synced) {
+    // After merge, push merged result back so Supabase has the complete data
+    const merged = loadData();
+    pushToSupabase(merged);
     refreshCurrentScreen();
   } else {
-    // Only push to Supabase if local data is not empty (has children or educators)
-    const local = loadData();
-    if ((local.children && local.children.length > 0) || (local.educators && local.educators.length > 0)) {
-      pushToSupabase(local);
-    }
+    // Sync failed — do NOT push local data to Supabase (could overwrite newer remote data)
+    // Just use whatever is in localStorage
+    console.warn('Supabase sync failed, using local data only');
   }
 
   // Migrate plain text password to hash (after sync so we hash the final state)
@@ -2312,16 +2402,19 @@ function saveCancelBeforeStart() {
     saveData(initData);
   }
 
-  // Realtime: when someone else saves, update local cache
+  // Realtime: when someone else saves, merge with local data (don't overwrite)
   sb.channel('app_state_sync')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, async payload => {
       if (payload.new && payload.new.data) {
-        const d = migrateData(payload.new.data);
-        if (d.settings.adminPassword && !isHashed(d.settings.adminPassword)) {
-          d.settings.adminPassword = await hashPassword(d.settings.adminPassword);
+        const remote = migrateData(payload.new.data);
+        if (remote.settings.adminPassword && !isHashed(remote.settings.adminPassword)) {
+          remote.settings.adminPassword = await hashPassword(remote.settings.adminPassword);
         }
-        _cache = d;
-        localStorage.setItem('kretin_v2', JSON.stringify(d));
+        // Merge remote data with local — never blindly overwrite
+        const local = _cache || loadData();
+        const merged = mergeData(local, remote);
+        _cache = merged;
+        localStorage.setItem('kretin_v2', JSON.stringify(merged));
         refreshCurrentScreen();
       }
     })
