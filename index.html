@@ -2390,6 +2390,8 @@ function adminSaveNewChild() {
   if (!age || age < 4 || age > 18) { toast('Věk 4–18!'); return; }
   if (!pin || !/^\d{4}$/.test(pin)) { toast('PIN musí být 4 číslice!'); return; }
   const data = loadData();
+  const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (duplicate) { toast('Dítě s tímto jménem již existuje!'); return; }
   data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, records: {} });
   saveData(data);
   closeModal();
