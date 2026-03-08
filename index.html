@@ -1278,6 +1278,7 @@ function removeTodayActivity() {
   if (!isCancellable(rec.activity, data, getToday())) { toast('Čas na změnu vypršel'); return; }
   const name = rec.activity.name;
   rec.activity = null;
+  rec.activityCancelledAt = Date.now();
   saveData(data);
   renderDashboard();
   toast('Odebráno: ' + name);
