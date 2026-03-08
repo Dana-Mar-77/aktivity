@@ -477,6 +477,7 @@ function loadData() {
 
 function saveData(data) {
   data._localVersion = (data._localVersion || 0) + 1;
+  if (isAdmin) data._adminDataUpdatedAt = Date.now();
   _cache = data;
   localStorage.setItem('kretin_v2', JSON.stringify(data));
   pushToSupabase(data);
@@ -506,6 +507,19 @@ function mergeData(local, remote) {
   if (!local || !local.children || local.children.length === 0) return remote;
   if (!remote || !remote.children) return local;
   const merged = JSON.parse(JSON.stringify(remote));
+
+  // Admin data (settings, educators, activities, schedule, locations): use newer version
+  const localAdminTs = local._adminDataUpdatedAt || 0;
+  const remoteAdminTs = remote._adminDataUpdatedAt || 0;
+  if (localAdminTs > remoteAdminTs) {
+    merged.settings = JSON.parse(JSON.stringify(local.settings));
+    merged.educators = JSON.parse(JSON.stringify(local.educators));
+    merged.activities = JSON.parse(JSON.stringify(local.activities));
+    merged.locations = JSON.parse(JSON.stringify(local.locations));
+    merged.schedule = JSON.parse(JSON.stringify(local.schedule));
+    merged._adminDataUpdatedAt = localAdminTs;
+  }
+
   // Build lookup of remote children by id
   const remoteMap = {};
   (merged.children || []).forEach(c => { remoteMap[c.id] = c; });
@@ -520,6 +534,18 @@ function mergeData(local, remote) {
       // Otherwise keep it (new registration not yet synced)
       merged.children.push(JSON.parse(JSON.stringify(localChild)));
       return;
+    }
+    // Merge child profile: use newer _profileUpdatedAt
+    const localProfileTs = localChild._profileUpdatedAt || 0;
+    const remoteProfileTs = remoteChild._profileUpdatedAt || 0;
+    if (localProfileTs > remoteProfileTs) {
+      remoteChild.name = localChild.name;
+      remoteChild.age = localChild.age;
+      remoteChild.gender = localChild.gender;
+      remoteChild.group = localChild.group;
+      remoteChild.subgroup = localChild.subgroup;
+      remoteChild.pin = localChild.pin;
+      remoteChild._profileUpdatedAt = localProfileTs;
     }
     // Merge records: for each date, keep the one with more data / newer timestamp
     if (!localChild.records) return;
@@ -2259,6 +2285,7 @@ function saveEditChild(id) {
   child.subgroup = document.getElementById('edit-subgroup').value;
   const newPin = document.getElementById('edit-pin').value.trim();
   if (newPin && /^\d{4}$/.test(newPin)) child.pin = newPin;
+  child._profileUpdatedAt = Date.now();
   saveData(data);
   closeModal();
   renderAdminChildren();
@@ -2281,6 +2308,7 @@ function saveResetPin(id) {
   const child = data.children.find(c => c.id === id);
   if (!child) return;
   child.pin = pin;
+  child._profileUpdatedAt = Date.now();
   saveData(data);
   closeModal();
   toast('PIN změněn pro ' + child.name);
