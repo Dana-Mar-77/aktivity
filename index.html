@@ -703,6 +703,25 @@ function getTotalPoints(child) {
   return total;
 }
 
+function getLockedPoints(child, data) {
+  if (!child.records) return 0;
+  let total = 0;
+  const today = getToday();
+  const kmLocked = isKmLocked(data);
+  for (const day in child.records) {
+    const r = child.records[day];
+    if (day < today) {
+      if (r.activity) total += r.activity.points;
+      if (r.activities) r.activities.forEach(a => { total += a.points; });
+      if (r.km) total += r.km;
+    } else if (day === today) {
+      if (r.activity && !isBeforeDeadline(data, day)) total += r.activity.points;
+      if (r.km && kmLocked) total += r.km;
+    }
+  }
+  return total;
+}
+
 function getActivitySignups(data, date, activityId) {
   return data.children.filter(c => {
     const rec = c.records && c.records[date];
@@ -1562,17 +1581,17 @@ function renderLeaderboard() {
   if (currentFilter === 'kluk' || currentFilter === 'holka') children = children.filter(c => c.gender === currentFilter);
   else if (currentFilter !== 'all') children = children.filter(c => c.group === currentFilter);
   if (currentSubFilter !== 'all') children = children.filter(c => c.subgroup === currentSubFilter);
-  children.sort((a, b) => getTotalPoints(b) - getTotalPoints(a));
+  children.sort((a, b) => getLockedPoints(b, data) - getLockedPoints(a, data));
 
   const container = document.getElementById('leaderboard-chart');
   if (children.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏆</div><p>Žádní účastníci.</p></div>';
     return;
   }
-  const maxPts = Math.max(1, getTotalPoints(children[0]));
+  const maxPts = Math.max(1, getLockedPoints(children[0], data));
   container.innerHTML = '<div class="lb-chart">' + children.map((c, i) => {
     const rank = i + 1;
-    const pts = getTotalPoints(c);
+    const pts = getLockedPoints(c, data);
     const barH = Math.max(30, Math.round((pts / maxPts) * 150));
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
     const barCls = rank <= 3 ? 'bar-' + rank : 'bar-rest';
@@ -1586,7 +1605,7 @@ function renderGroupCompare(data) {
   const colors = ['#FFF8E1', '#FFFDE7', '#E8F5E9', '#F3E5F5'];
   container.innerHTML = data.settings.groups.map((g, i) => {
     const members = data.children.filter(c => c.group === g);
-    const total = members.reduce((s, c) => s + getTotalPoints(c), 0);
+    const total = members.reduce((s, c) => s + getLockedPoints(c, data), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
     return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
   }).join('');
@@ -1598,7 +1617,7 @@ function renderSubgroupCompare(data) {
   container.style.gridTemplateColumns = 'repeat(' + Math.min(data.settings.subgroups.length, 3) + ',1fr)';
   container.innerHTML = data.settings.subgroups.map((s, i) => {
     const members = data.children.filter(c => c.subgroup === s);
-    const total = members.reduce((sum, c) => sum + getTotalPoints(c), 0);
+    const total = members.reduce((sum, c) => sum + getLockedPoints(c, data), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
     return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
   }).join('');
@@ -1615,7 +1634,7 @@ function renderProfiles() {
     return;
   }
   grid.innerHTML = data.children.map(c => {
-    const pts = getTotalPoints(c);
+    const pts = getLockedPoints(c, data);
     const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
     return '<div class="profile-icon" onclick="showProfileDetail(\'' + c.id + '\')"><div class="avatar">' + av + '</div><div class="profile-name">' + esc(c.name) + '</div><div class="profile-pts">⭐ ' + pts + ' ' + bodyCz(pts) + '</div></div>';
   }).join('');
@@ -1625,7 +1644,7 @@ function showProfileDetail(id) {
   const data = loadData();
   const child = data.children.find(c => c.id === id);
   if (!child) return;
-  const pts = getTotalPoints(child);
+  const pts = getLockedPoints(child, data);
   const av = child.photo ? '<img src="' + child.photo + '" alt="">' : (child.gender === 'kluk' ? '🧒' : '👧');
   const rankings = getRankings(child, data);
   let totalKm = 0;
@@ -1661,7 +1680,7 @@ function showProfileDetail(id) {
 
 function getRankings(child, data) {
   function calcRank(list) {
-    const sorted = list.map(c => ({ id: c.id, pts: getTotalPoints(c) })).sort((a, b) => b.pts - a.pts);
+    const sorted = list.map(c => ({ id: c.id, pts: getLockedPoints(c, data) })).sort((a, b) => b.pts - a.pts);
     const rank = sorted.findIndex(c => c.id === child.id) + 1;
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅';
     return { rank, total: sorted.length, medal };
