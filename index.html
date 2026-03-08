@@ -718,6 +718,43 @@ let scheduleDate = getToday();
 let activityDate = getToday();
 let scheduleDayVariant = 'grid';
 
+// ============ SESSION PERSISTENCE ============
+function saveSession() {
+  const s = { childId: currentChildId, isAdmin: isAdmin, isHost: isHost };
+  sessionStorage.setItem('kretin_session', JSON.stringify(s));
+}
+
+function restoreSession() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem('kretin_session'));
+    if (!s) return false;
+    if (s.isAdmin) {
+      isAdmin = true;
+      showNav(false);
+      document.querySelector('.app-container').classList.add('admin-wide');
+      showScreen('admin');
+      return true;
+    }
+    if (s.isHost) {
+      isHost = true;
+      hostDate = getToday();
+      showNav(false);
+      showScreen('host');
+      return true;
+    }
+    if (s.childId) {
+      const data = loadData();
+      if (data.children.some(c => c.id === s.childId)) {
+        currentChildId = s.childId;
+        showNav(true);
+        showScreen('dashboard');
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
 // ============ NAVIGATION ============
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -843,6 +880,7 @@ function registerChild() {
   document.getElementById('reg-avatar-preview').innerHTML = '📷';
   document.querySelectorAll('#register-form .option-btn').forEach(b => b.classList.remove('selected'));
   currentChildId = id;
+  saveSession();
   hideRegister();
   showNav(true);
   showScreen('dashboard');
@@ -878,13 +916,14 @@ function loginChild() {
   if (!child) { toast('Dítě nenalezeno!'); return; }
   if (child.pin !== pin) { toast('Špatný PIN!'); return; }
   currentChildId = child.id;
+  saveSession();
   hideLogin();
   showNav(true);
   showScreen('dashboard');
   toast('Ahoj, ' + child.name + '!');
 }
 
-function logoutChild() { currentChildId = null; isAdmin = false; showNav(false); showScreen('auth'); }
+function logoutChild() { currentChildId = null; isAdmin = false; showNav(false); saveSession(); showScreen('auth'); }
 
 async function hashPassword(plain) {
   const data = new TextEncoder().encode(plain);
@@ -900,6 +939,7 @@ async function loginAdmin() {
   const hashed = await hashPassword(pass);
   if (hashed !== data.settings.adminPassword) { toast('Špatné heslo!'); return; }
   isAdmin = true;
+  saveSession();
   hideAdminLogin();
   showNav(false);
   document.querySelector('.app-container').classList.add('admin-wide');
@@ -907,7 +947,7 @@ async function loginAdmin() {
   toast('Admin přihlášen');
 }
 
-function logoutAdmin() { isAdmin = false; document.querySelector('.app-container').classList.remove('admin-wide'); showScreen('auth'); }
+function logoutAdmin() { isAdmin = false; document.querySelector('.app-container').classList.remove('admin-wide'); saveSession(); showScreen('auth'); }
 
 // ============ HOST ============
 function showHostLogin() {
@@ -923,13 +963,14 @@ function loginHost() {
   if (pass !== 'host') { toast('Špatné heslo!'); return; }
   isHost = true;
   hostDate = getToday();
+  saveSession();
   hideHostLogin();
   showNav(false);
   showScreen('host');
   toast('Host přihlášen');
 }
 
-function logoutHost() { isHost = false; showScreen('auth'); }
+function logoutHost() { isHost = false; saveSession(); showScreen('auth'); }
 
 function hostSelectDate(date) {
   hostDate = date;
@@ -2671,6 +2712,9 @@ function restoreBackup(idx) {
       }
     })
     .subscribe();
+
+  // Restore previous session (if any)
+  restoreSession();
 
   // Click outside modal to close
   document.getElementById('modal-overlay').addEventListener('click', function(e) {
