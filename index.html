@@ -717,6 +717,7 @@ let currentAdminTab = 'schedule';
 let scheduleDate = getToday();
 let activityDate = getToday();
 let scheduleDayVariant = 'grid';
+let _initDone = false;
 
 // ============ SESSION PERSISTENCE ============
 function saveSession() {
@@ -865,6 +866,7 @@ function previewPhoto(input) {
 }
 
 function registerChild() {
+  if (!_initDone) { toast('Počkej, probíhá synchronizace...'); return; }
   const name = document.getElementById('reg-name').value.trim();
   const gender = getSelectedOption('reg-gender');
   const age = parseInt(document.getElementById('reg-age').value);
@@ -2740,6 +2742,8 @@ function restoreBackup(idx) {
 
   // Restore previous session (if any)
   restoreSession();
+
+  _initDone = true;
 
   // Click outside modal to close
   document.getElementById('modal-overlay').addEventListener('click', function(e) {
