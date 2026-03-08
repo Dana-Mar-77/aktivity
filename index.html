@@ -1182,7 +1182,9 @@ function renderDashboard() {
     actHtml += '<span style="font-weight:700;color:var(--green)">+' + rec.activity.points + ' ' + bodyCz(rec.activity.points) + '</span>';
     actHtml += '</div>';
     if (canChange) {
-      actHtml += '<div style="margin-top:6px;font-size:.8rem;color:var(--gray)">Na změnu zbývá ' + minutesLeft + ' min &middot; <button class="remove-btn" onclick="removeTodayActivity()" style="font-size:.8rem;color:var(--red);background:none;border:none;cursor:pointer;text-decoration:underline">Změnit</button></div>';
+      var _h = Math.floor(minutesLeft / 60), _m = minutesLeft % 60;
+      var _timeStr = _h > 0 ? _h + ' h ' + (_m > 0 ? _m + ' min' : '') : _m + ' min';
+      actHtml += '<div style="margin-top:6px;font-size:.8rem;color:var(--gray)">Na změnu zbývá ' + _timeStr + ' &middot; <button class="remove-btn" onclick="removeTodayActivity()" style="font-size:.8rem;color:var(--red);background:none;border:none;cursor:pointer;text-decoration:underline">Změnit</button></div>';
     } else {
       actHtml += '<div style="margin-top:6px;font-size:.8rem;color:var(--gray)">🔒 Uzamčeno</div>';
     }
@@ -1193,7 +1195,9 @@ function renderDashboard() {
     actHtml += '<div class="dash-act-box orange">';
     actHtml += '<div style="font-weight:700;color:#E65100">Ještě sis nevybral/a aktivitu na dnešek!</div>';
     if (beforeDeadline) {
-      actHtml += '<div style="margin-top:6px;font-size:.85rem">Zbývá ' + minutesLeft + ' min do uzávěrky &middot; <a href="#" onclick="showScreen(\'activities\');return false" style="color:var(--blue);font-weight:700">Vyber si &rarr;</a></div>';
+      var _h2 = Math.floor(minutesLeft / 60), _m2 = minutesLeft % 60;
+      var _timeStr2 = _h2 > 0 ? _h2 + ' h ' + (_m2 > 0 ? _m2 + ' min' : '') : _m2 + ' min';
+      actHtml += '<div style="margin-top:6px;font-size:.85rem">Zbývá ' + _timeStr2 + ' do uzávěrky &middot; <a href="#" onclick="showScreen(\'activities\');return false" style="color:var(--blue);font-weight:700">Vyber si &rarr;</a></div>';
     } else {
       actHtml += '<div style="margin-top:6px;font-size:.85rem;color:var(--gray)">Uzávěrka vypršela</div>';
     }
