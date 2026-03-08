@@ -878,6 +878,8 @@ function registerChild() {
   if (!subgroup) { toast('Vyber podskupinu!'); return; }
   if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) { toast('PIN musí být 4 číslice!'); return; }
   const data = loadData();
+  const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (duplicate) { toast('Dítě s tímto jménem již existuje! Použij Přihlásit se.'); return; }
   const id = genId();
   data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, records: {} });
   saveData(data);
