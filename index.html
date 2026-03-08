@@ -498,7 +498,11 @@ function mergeData(local, remote) {
   (local.children || []).forEach(localChild => {
     const remoteChild = remoteMap[localChild.id];
     if (!remoteChild) {
-      // Child exists locally but not remotely — keep it
+      // Child exists locally but not remotely
+      // Check if it was explicitly deleted (in either local or remote deletedChildren list)
+      const deletedIds = [].concat(local.deletedChildren || [], remote.deletedChildren || []);
+      if (deletedIds.includes(localChild.id)) return; // deleted by admin — don't re-add
+      // Otherwise keep it (new registration not yet synced)
       merged.children.push(JSON.parse(JSON.stringify(localChild)));
       return;
     }
@@ -531,9 +535,15 @@ function mergeData(local, remote) {
           rr.activity = JSON.parse(JSON.stringify(lr.activity));
         }
       }
-      // If both are 0 (no timestamp), keep whatever remote has (or local if remote empty)
-      if (lLatest === 0 && rLatest === 0 && lr.activity && !rr.activity) {
-        rr.activity = JSON.parse(JSON.stringify(lr.activity));
+      // If both are 0 (no timestamp = legacy records), prefer local state
+      // because local represents the most recent action on this device
+      if (lLatest === 0 && rLatest === 0) {
+        if (lr.activity && !rr.activity) {
+          rr.activity = JSON.parse(JSON.stringify(lr.activity));
+        } else if (!lr.activity && rr.activity) {
+          // Local is null = admin/child deleted it; respect deletion over old timestamp:0 record
+          rr.activity = null;
+        }
       }
       // Merge km: use timestamp if available, otherwise keep higher value
       const lkmt = lr.kmTimestamp || 0;
@@ -550,8 +560,11 @@ function mergeData(local, remote) {
       remoteChild.photo = localChild.photo;
     }
   });
-  // Also add children that exist remotely but not locally (new registrations from other devices)
-  // (already in merged from remote, nothing to do)
+  // Merge deletedChildren lists from both sides
+  const allDeleted = [].concat(local.deletedChildren || [], remote.deletedChildren || []);
+  merged.deletedChildren = [...new Set(allDeleted)];
+  // Remove any children from merged that are in the deleted list
+  merged.children = merged.children.filter(c => !merged.deletedChildren.includes(c.id));
   return merged;
 }
 
@@ -1974,6 +1987,9 @@ function adminDeleteChild(id) {
   if (!confirm('Opravdu smazat toto dítě?')) return;
   const data = loadData();
   data.children = data.children.filter(c => c.id !== id);
+  // Track deleted child so merge won't re-add it from other devices
+  if (!data.deletedChildren) data.deletedChildren = [];
+  if (!data.deletedChildren.includes(id)) data.deletedChildren.push(id);
   saveData(data);
   renderAdminChildren();
   toast('Dítě smazáno');
