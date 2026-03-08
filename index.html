@@ -2282,6 +2282,8 @@ function renderAdminSettings() {
   html += '<div class="form-group"><label>Minut před začátkem aktivity</label><input type="number" id="cancel-before-start" value="' + (data.settings.cancelBeforeStartMinutes || 30) + '" min="5" max="1440"></div>';
   html += '<button class="btn btn-sm btn-blue" onclick="saveCancelBeforeStart()">Uložit</button>';
 
+  html += renderBackupSection();
+
   html += '</div>';
   container.innerHTML = html;
 }
@@ -2374,6 +2376,89 @@ function saveCancelBeforeStart() {
   toast('Uzávěrka uložena');
 }
 
+// ============ AUTO BACKUP ============
+function autoBackup() {
+  try {
+    const data = loadData();
+    if (!data.children || data.children.length === 0) return;
+    const today = getToday();
+    const backupKey = 'kretin_v2_backup';
+    let backups = [];
+    try { backups = JSON.parse(localStorage.getItem(backupKey)) || []; } catch {}
+    // Max 3 backups, one per day
+    if (backups.length > 0 && backups[backups.length - 1].date === today) return; // already backed up today
+    backups.push({ date: today, time: new Date().toISOString(), data: data });
+    // Keep only last 3
+    if (backups.length > 3) backups = backups.slice(-3);
+    localStorage.setItem(backupKey, JSON.stringify(backups));
+    console.log('Auto backup: ' + today);
+  } catch (e) { console.error('Backup failed:', e); }
+}
+
+function renderBackupSection() {
+  let backups = [];
+  try { backups = JSON.parse(localStorage.getItem('kretin_v2_backup')) || []; } catch {}
+  let html = '<div class="divider"></div><h3 class="mb-8">Zálohy dat</h3>';
+  if (backups.length === 0) {
+    html += '<p style="font-size:.85rem;color:var(--gray)">Zatím žádné zálohy. Záloha se vytvoří automaticky jednou denně.</p>';
+  } else {
+    backups.slice().reverse().forEach((b, i) => {
+      const idx = backups.length - 1 - i;
+      const childCount = b.data && b.data.children ? b.data.children.length : '?';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0">';
+      html += '<span style="font-size:.85rem">' + formatDate(b.date) + ' · ' + childCount + ' dětí</span>';
+      html += '<div style="display:flex;gap:6px">';
+      html += '<button class="btn btn-sm btn-blue" style="padding:4px 10px;font-size:.75rem" onclick="downloadBackup(' + idx + ')">Stáhnout</button>';
+      html += '<button class="btn btn-sm btn-orange" style="padding:4px 10px;font-size:.75rem" onclick="restoreBackup(' + idx + ')">Obnovit</button>';
+      html += '</div></div>';
+    });
+  }
+  html += '<button class="btn btn-sm btn-green mt-8" onclick="manualBackup()">Vytvořit zálohu teď</button>';
+  return html;
+}
+
+function manualBackup() {
+  const data = loadData();
+  if (!data.children || data.children.length === 0) { toast('Žádná data k zálohování!'); return; }
+  const backupKey = 'kretin_v2_backup';
+  let backups = [];
+  try { backups = JSON.parse(localStorage.getItem(backupKey)) || []; } catch {}
+  // Replace today's backup or add new
+  const today = getToday();
+  backups = backups.filter(b => b.date !== today);
+  backups.push({ date: today, time: new Date().toISOString(), data: data });
+  if (backups.length > 3) backups = backups.slice(-3);
+  localStorage.setItem(backupKey, JSON.stringify(backups));
+  toast('Záloha vytvořena');
+  renderAdminSettings();
+}
+
+function downloadBackup(idx) {
+  let backups = [];
+  try { backups = JSON.parse(localStorage.getItem('kretin_v2_backup')) || []; } catch {}
+  if (!backups[idx]) { toast('Záloha nenalezena!'); return; }
+  const json = JSON.stringify(backups[idx].data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'zaloha_' + backups[idx].date + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Záloha stažena');
+}
+
+function restoreBackup(idx) {
+  let backups = [];
+  try { backups = JSON.parse(localStorage.getItem('kretin_v2_backup')) || []; } catch {}
+  if (!backups[idx]) { toast('Záloha nenalezena!'); return; }
+  if (!confirm('Opravdu obnovit data ze zálohy ' + formatDate(backups[idx].date) + '? Aktuální data budou nahrazena.')) return;
+  const restored = migrateData(backups[idx].data);
+  saveData(restored);
+  toast('Data obnovena ze zálohy');
+  renderAdmin();
+}
+
 // ============ INIT ============
 (async function init() {
   // Load from localStorage first (fast)
@@ -2394,6 +2479,9 @@ function saveCancelBeforeStart() {
     // Just use whatever is in localStorage
     console.warn('Supabase sync failed, using local data only');
   }
+
+  // Auto backup once per day
+  autoBackup();
 
   // Migrate plain text password to hash (after sync so we hash the final state)
   const initData = loadData();
