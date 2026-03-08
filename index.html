@@ -1069,11 +1069,11 @@ function renderDashboard() {
     const removeBtn = canRemove
       ? '<button class="remove-btn" onclick="removeTodayActivity()" title="Odebrat">✕</button>'
       : '<span style="font-size:.7rem;color:var(--gray)">🔒</span>';
-    items.push('<li><span>' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' <strong>(+' + rec.activity.points + 'b)</strong></span>' + removeBtn + '</li>');
+    items.push('<li><span>' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' <strong>(+' + rec.activity.points + ' b)</strong></span>' + removeBtn + '</li>');
   }
   if (rec.km > 0) {
     const kmBtn = (!active || isKmLocked(data)) ? '<span style="font-size:.7rem;color:var(--gray)">🔒</span>' : '<button class="remove-btn" onclick="resetTodayKm()">✕</button>';
-    items.push('<li><span>🚶 ' + rec.km + ' km <strong>(+' + rec.km + 'b)</strong></span>' + kmBtn + '</li>');
+    items.push('<li><span>🚶 ' + rec.km + ' km <strong>(+' + rec.km + ' b)</strong></span>' + kmBtn + '</li>');
   }
   if (items.length === 0) { list.innerHTML = ''; empty.style.display = 'block'; }
   else { list.innerHTML = items.join(''); empty.style.display = 'none'; }
@@ -1228,9 +1228,9 @@ function renderActivities() {
   if (dateActivity) {
     if (canCancel) {
       const mins = getCancelMinutesLeft(dateActivity, data, selDate);
-      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + 'b)<br><small style="font-weight:400">Můžeš změnit do ' + mins + ' min před začátkem — klikni na aktivitu pro zrušení</small></div>';
+      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + ' b)<br><small style="font-weight:400">Můžeš změnit do ' + mins + ' min před začátkem — klikni na aktivitu pro zrušení</small></div>';
     } else {
-      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + 'b)<br><small style="font-weight:400;color:var(--gray)">Aktivita je uzamčena</small></div>';
+      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + ' b)<br><small style="font-weight:400;color:var(--gray)">Aktivita je uzamčena</small></div>';
     }
   } else {
     infoHtml += '<div class="info-box">Vyber si jednu aktivitu na ' + formatDate(selDate) + ':</div>';
@@ -1273,7 +1273,7 @@ function renderActivities() {
     html += esc(actName);
     html += '<div class="tile-meta">' + locIcon + ' ' + getLocationName(data, slot.locationId) + ' · ' + esc(eduName) + '</div>';
     html += '<div class="tile-capacity ' + (isFull ? 'full' : '') + '">' + signups + '/' + slot.maxKids + '</div>';
-    html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + slot.points + 'b</div>';
+    html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + slot.points + ' b</div>';
     html += '</div>';
   });
   html += '</div>';
@@ -1300,7 +1300,7 @@ function addActivity(activityId) {
   rec.activity = { activityId: act.id, name: act.name, points: act.points, icon: act.icon, timestamp: Date.now() };
   saveData(data);
   renderActivities();
-  toast('+' + act.points + 'b za ' + act.name + '!');
+  toast('+' + act.points + ' b za ' + act.name + '!');
 }
 
 function cancelActivity() {
@@ -1376,7 +1376,7 @@ function saveKm() {
   rec.kmTimestamp = Date.now();
   saveData(data);
   document.getElementById('km-today-saved').textContent = val;
-  toast('Uloženo: ' + val + ' km (+' + val + 'b)');
+  toast('Uloženo: ' + val + ' km (+' + val + ' b)');
 }
 
 // ============ LEADERBOARD ============
@@ -1427,7 +1427,7 @@ function renderLeaderboard() {
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
     const barCls = rank <= 3 ? 'bar-' + rank : 'bar-rest';
     const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-    return '<div class="lb-bar"><div class="lb-bar-top"><div class="avatar">' + av + '</div><div class="lb-bar-name">' + esc(c.name) + '</div><div class="lb-bar-sub">' + esc(c.subgroup) + '</div></div><div class="lb-bar-col ' + barCls + '" style="height:' + barH + 'px">' + (medal ? '<span class="bar-rank">' + medal + '</span>' : '<span class="bar-rank" style="font-size:.7rem;color:rgba(255,255,255,.8)">' + rank + '.</span>') + '<span class="bar-pts">' + pts + 'b</span></div></div>';
+    return '<div class="lb-bar"><div class="lb-bar-top"><div class="avatar">' + av + '</div><div class="lb-bar-name">' + esc(c.name) + '</div><div class="lb-bar-sub">' + esc(c.subgroup) + '</div></div><div class="lb-bar-col ' + barCls + '" style="height:' + barH + 'px">' + (medal ? '<span class="bar-rank">' + medal + '</span>' : '<span class="bar-rank" style="font-size:.7rem;color:rgba(255,255,255,.8)">' + rank + '.</span>') + '<span class="bar-pts">' + pts + ' b</span></div></div>';
   }).join('') + '</div>';
 }
 
@@ -1438,7 +1438,7 @@ function renderGroupCompare(data) {
     const members = data.children.filter(c => c.group === g);
     const total = members.reduce((s, c) => s + getTotalPoints(c), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
-    return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+    return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
   }).join('');
 }
 
@@ -1450,7 +1450,7 @@ function renderSubgroupCompare(data) {
     const members = data.children.filter(c => c.subgroup === s);
     const total = members.reduce((sum, c) => sum + getTotalPoints(c), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
-    return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+    return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
   }).join('');
 }
 
@@ -1467,7 +1467,7 @@ function renderProfiles() {
   grid.innerHTML = data.children.map(c => {
     const pts = getTotalPoints(c);
     const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-    return '<div class="profile-icon" onclick="showProfileDetail(\'' + c.id + '\')"><div class="avatar">' + av + '</div><div class="profile-name">' + esc(c.name) + '</div><div class="profile-pts">⭐ ' + pts + 'b</div></div>';
+    return '<div class="profile-icon" onclick="showProfileDetail(\'' + c.id + '\')"><div class="avatar">' + av + '</div><div class="profile-name">' + esc(c.name) + '</div><div class="profile-pts">⭐ ' + pts + ' b</div></div>';
   }).join('');
 }
 
@@ -1490,11 +1490,11 @@ function showProfileDetail(id) {
       const items = [];
       if (r.activity) {
         const cls = r.activity.points <= 10 ? 'tag-green' : r.activity.points <= 20 ? 'tag-orange' : 'tag-purple';
-        items.push('<span class="tag ' + cls + '">' + (r.activity.icon || '🏃') + ' ' + esc(r.activity.name) + ' +' + r.activity.points + 'b</span>');
+        items.push('<span class="tag ' + cls + '">' + (r.activity.icon || '🏃') + ' ' + esc(r.activity.name) + ' +' + r.activity.points + ' b</span>');
       }
       if (r.activities) r.activities.forEach(a => {
         const cls = a.points <= 10 ? 'tag-green' : a.points <= 20 ? 'tag-orange' : 'tag-purple';
-        items.push('<span class="tag ' + cls + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' +' + a.points + 'b</span>');
+        items.push('<span class="tag ' + cls + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' +' + a.points + ' b</span>');
       });
       if (r.km > 0) items.push('<span class="tag tag-blue">🚶 ' + r.km + ' km</span>');
       if (items.length === 0) return '';
@@ -1660,7 +1660,7 @@ function renderAdminSchedule() {
           const ptsClass = act.points <= 10 ? 'pts-10' : act.points <= 20 ? 'pts-20' : 'pts-30';
           const chipClass = isSelected ? ptsClass : 'inactive';
           const conflStyle = isConfl ? ';outline:2px solid var(--red)' : '';
-          html += '<span class="edu-chip ' + chipClass + '" style="' + conflStyle + '" onclick="event.stopPropagation();toggleScheduleSlot(\'' + edu.id + '\',\'' + actId + '\')" title="' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + '">' + (act.icon || '🏃') + ' ' + esc(act.name) + ' (' + act.points + 'b)</span>';
+          html += '<span class="edu-chip ' + chipClass + '" style="' + conflStyle + '" onclick="event.stopPropagation();toggleScheduleSlot(\'' + edu.id + '\',\'' + actId + '\')" title="' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + '">' + (act.icon || '🏃') + ' ' + esc(act.name) + ' (' + act.points + ' b)</span>';
         });
         html += '</div>';
       }
@@ -1884,7 +1884,7 @@ function renderAdminActivities() {
       html += '<span class="tile-icon">' + (act.icon || '🏃') + '</span>';
       html += '<strong>' + esc(act.name) + '</strong>';
       html += '<div class="tile-meta">' + locIcon + ' ' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + '</div>';
-      html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + act.points + 'b</div>';
+      html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + act.points + ' b</div>';
       if (eduCount > 0) html += '<div style="font-size:.65rem;color:var(--gray);margin-top:2px">👩‍🏫 ' + eduCount + '</div>';
       html += '<div style="display:flex;gap:4px;justify-content:center;margin-top:6px"><button class="btn btn-sm btn-blue" style="padding:3px 8px;font-size:.7rem" onclick="event.stopPropagation();editGlobalActivity(\'' + act.id + '\')">✏️</button><button class="btn btn-sm btn-red" style="padding:3px 8px;font-size:.7rem" onclick="event.stopPropagation();deleteGlobalActivity(\'' + act.id + '\')">🗑️</button></div>';
       html += '</div>';
@@ -2110,7 +2110,7 @@ function renderAdminChildren() {
           const rec = c.records[day];
           const actTag = rec.activity ? (() => {
             const cls = rec.activity.points <= 10 ? 'tag-green' : rec.activity.points <= 20 ? 'tag-orange' : 'tag-purple';
-            return '<span class="tag ' + cls + '">' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' (+' + rec.activity.points + 'b) <span class="remove-tag" onclick="adminRemoveActivity(\'' + c.id + '\',\'' + day + '\')">✕</span></span>';
+            return '<span class="tag ' + cls + '">' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' (+' + rec.activity.points + ' b) <span class="remove-tag" onclick="adminRemoveActivity(\'' + c.id + '\',\'' + day + '\')">✕</span></span>';
           })() : '';
           const kmTag = rec.km > 0 ? '<span class="tag tag-blue">' + rec.km + ' km <span class="remove-tag" onclick="adminRemoveKm(\'' + c.id + '\',\'' + day + '\')">✕</span></span>' : '';
           if (!actTag && !kmTag) return '';
@@ -2119,7 +2119,7 @@ function renderAdminChildren() {
       }
       if (!daysHtml) daysHtml = '<p style="font-size:.8rem;color:var(--gray);padding:4px 0">Žádné záznamy</p>';
 
-      html += '<details class="admin-record"><summary>' + esc(c.name) + ' — ' + esc(c.group) + '/' + esc(c.subgroup) + ' — ' + pts + 'b';
+      html += '<details class="admin-record"><summary>' + esc(c.name) + ' — ' + esc(c.group) + '/' + esc(c.subgroup) + ' — ' + pts + ' b';
       html += '<button class="btn btn-sm btn-red" style="float:right;padding:2px 8px;font-size:.75rem" onclick="event.stopPropagation();adminDeleteChild(\'' + c.id + '\')">Smazat</button>';
       html += '<button class="btn btn-sm btn-blue" style="float:right;padding:2px 8px;font-size:.75rem;margin-right:4px" onclick="event.stopPropagation();adminEditChild(\'' + c.id + '\')">Upravit</button>';
       html += '<button class="btn btn-sm btn-green" style="float:right;padding:2px 8px;font-size:.75rem;margin-right:4px" onclick="event.stopPropagation();adminAddRecord(\'' + c.id + '\')">+ Záznam</button>';
@@ -2248,7 +2248,7 @@ function adminAddRecord(id) {
 
   // Use global activity catalog
   const actOptions = data.activities.length > 0
-    ? data.activities.map(a => '<option value="' + a.id + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' (' + a.points + 'b)</option>').join('')
+    ? data.activities.map(a => '<option value="' + a.id + '">' + (a.icon || '🏃') + ' ' + esc(a.name) + ' (' + a.points + ' b)</option>').join('')
     : '<option value="">Žádné aktivity</option>';
 
   const modal = document.getElementById('modal-content');
@@ -2355,7 +2355,7 @@ function renderAdminStats() {
     const members = data.children.filter(c => c.group === g);
     const total = members.reduce((s, c) => s + getTotalPoints(c), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
-    html += '<div class="group-card" style="background:var(--gray-light)"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+    html += '<div class="group-card" style="background:var(--gray-light)"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
   });
   html += '</div>';
 
@@ -2366,7 +2366,7 @@ function renderAdminStats() {
     const members = data.children.filter(c => c.subgroup === s);
     const total = members.reduce((sum, c) => sum + getTotalPoints(c), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
-    html += '<div class="group-card" style="background:var(--gray-light)"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + 'b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + 'b</div></div>';
+    html += '<div class="group-card" style="background:var(--gray-light)"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
   });
   html += '</div>';
 
