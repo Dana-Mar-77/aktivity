@@ -1186,16 +1186,20 @@ function getScheduledDates(data) {
   return dates;
 }
 
-function isCancellable(activity, data, date) {
-  if (!activity) return false;
+function isBeforeDeadline(data, date) {
   const sched = date && data.schedule[date];
   const ts = sched && sched.timeSlot ? parseTimeSlotStart(sched.timeSlot) : null;
-  if (!ts) return true; // no schedule/timeSlot → always cancellable
+  if (!ts) return true; // no schedule/timeSlot → allow
   const beforeMin = data.settings.cancelBeforeStartMinutes || 30;
   const startTime = new Date(date + 'T00:00:00');
   startTime.setHours(ts.hours, ts.minutes, 0, 0);
   const deadline = startTime.getTime() - beforeMin * 60000;
   return Date.now() < deadline;
+}
+
+function isCancellable(activity, data, date) {
+  if (!activity) return false;
+  return isBeforeDeadline(data, date);
 }
 
 function getCancelMinutesLeft(activity, data, date) {
@@ -1278,9 +1282,17 @@ function renderActivities() {
   }
   infoEl.innerHTML = infoHtml;
 
+  // Check if signups are still open for this date
+  const isDatePast = selDate < today;
+  const isLocked = isDatePast || !isBeforeDeadline(data, selDate);
+
   if (!sched || !sched.slots || sched.slots.length === 0) {
     container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">📋</div><p>Na tento den nejsou naplánovány aktivity.</p></div></div>';
     return;
+  }
+
+  if (isLocked && !dateActivity) {
+    infoEl.innerHTML = dateTabsHtml + '<div class="warning-box">Přihlašování na ' + formatDateShort(selDate) + ' je uzavřeno.</div>';
   }
 
   let html = '';
@@ -1299,10 +1311,8 @@ function renderActivities() {
     let onclick = '';
     if (isThis) {
       cls += ' done';
-      if (canCancel) { cls += ' cancellable'; onclick = 'onclick="cancelActivity()"'; }
-    } else if (dateActivity) {
-      cls += ' locked';
-    } else if (isFull) {
+      if (canCancel && !isDatePast) { cls += ' cancellable'; onclick = 'onclick="cancelActivity()"'; }
+    } else if (dateActivity || isFull || isLocked) {
       cls += ' locked';
     } else {
       onclick = 'onclick="addActivity(\'' + slot.activityId + '\')"';
@@ -1328,6 +1338,7 @@ function addActivity(activityId) {
   const act = getActivity(data, activityId);
   if (!act) return;
   const selDate = activityDate;
+  if (selDate < getToday() || !isBeforeDeadline(data, selDate)) { toast('Přihlašování je uzavřeno!'); return; }
   const rec = getRecord(child, selDate);
   if (rec.activity) { toast('Na tento den už máš zvolenou aktivitu!'); return; }
   const sched = data.schedule[selDate];
