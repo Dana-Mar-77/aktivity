@@ -67,6 +67,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .km-slider{width:100%;height:8px;-webkit-appearance:none;appearance:none;background:#E0E0E0;border-radius:4px;outline:none}
 .km-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:32px;height:32px;border-radius:50%;background:var(--blue);cursor:pointer;box-shadow:var(--shadow)}
 .km-buttons{display:flex;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.dash-act-box{padding:12px;border-radius:var(--radius-sm);margin-bottom:8px}
+.dash-act-box.green{background:#E8F5E9;border:1px solid #A5D6A7}
+.dash-act-box.orange{background:#FFF3E0;border:1px solid #FFCC80}
+.dash-act-box.gray{background:var(--gray-light);border:1px solid #E0E0E0}
+.dash-act-mini{padding:6px;border-radius:var(--radius-sm);background:var(--gray-light);text-align:center;font-size:.65rem}
+.dash-act-mini .dash-act-mini-icon{font-size:1rem;display:block;margin-bottom:2px}
+.dash-act-mini strong{display:block;line-height:1.2;margin-bottom:1px}
 .filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 .filter-btn{padding:6px 12px;border:2px solid #E0E0E0;border-radius:20px;background:var(--white);font-size:.8rem;font-weight:600;cursor:pointer;transition:all .2s}
 .filter-btn.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
@@ -196,7 +203,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .day-tile.weekend{background:#FAFAFA}
 .day-tile.selected.weekend{background:var(--blue-light)}
 .day-tile.today-marker::after{content:'';position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--red)}
-@media(max-width:400px){.activity-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}.quick-actions{grid-template-columns:1fr 1fr}.group-comparison{grid-template-columns:1fr}.app-header h1{font-size:.95rem}.admin-tab{font-size:.7rem;padding:6px 10px}.edu-check-grid{grid-template-columns:1fr}}
+@media(max-width:400px){.activity-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}.group-comparison{grid-template-columns:1fr}.app-header h1{font-size:.95rem}.admin-tab{font-size:.7rem;padding:6px 10px}.edu-check-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -261,20 +268,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <div class="info"><h2 id="dash-name"></h2><p id="dash-group"></p><div class="points-badge">⭐ <span id="dash-points">0</span> bodů</div></div>
       </div>
     </div>
-    <div class="card">
-      <div class="flex-between mb-8"><h2 style="margin-bottom:0">Dnešní záznamy</h2><span id="dash-date" style="font-size:.8rem;color:var(--gray)"></span></div>
-      <ul class="today-list" id="dash-today-list"></ul>
-      <div id="dash-today-empty" class="empty-state" style="display:none"><div class="empty-icon">📝</div><p>Zatím žádné záznamy. Pojď sportovat!</p></div>
+    <div id="dash-program-warning" class="warning-box" style="display:none;margin:0 0 12px 0"></div>
+    <div class="card" id="dash-activity-card">
+      <div class="flex-between mb-8"><h2 style="margin-bottom:0">Dnešní aktivita</h2><span id="dash-date" style="font-size:.8rem;color:var(--gray)"></span></div>
+      <div id="dash-activity-content"></div>
+    </div>
+    <div class="card" id="dash-km-card">
+      <h2>Kilometry</h2>
+      <div id="dash-km-lock-msg" class="warning-box" style="display:none">Záznam kilometrů je uzavřen.<br><small style="font-weight:400">Kilometry lze zapisovat každý den do stanovené hodiny.</small></div>
+      <div id="dash-km-controls">
+        <div class="km-display"><span id="dash-km-value">0</span> <small>km</small></div>
+        <input type="range" class="km-slider" id="dash-km-slider" min="0" max="20" step="0.5" value="0" oninput="updateDashKmDisplay(this.value)">
+        <div class="km-buttons"><button class="btn btn-sm btn-outline" onclick="adjustDashKm(-1)">-1</button><button class="btn btn-sm btn-outline" onclick="adjustDashKm(-0.5)">-0.5</button><button class="btn btn-sm btn-outline" onclick="adjustDashKm(0.5)">+0.5</button><button class="btn btn-sm btn-outline" onclick="adjustDashKm(1)">+1</button></div>
+        <div class="mt-16 text-center"><p style="font-size:.85rem;color:var(--gray);margin-bottom:8px">Dnes zapsáno: <strong id="dash-km-today-saved">0</strong> km</p><button class="btn btn-blue btn-block" onclick="saveDashKm()">Uložit kilometry</button></div>
+      </div>
     </div>
     <div class="card" id="dash-schedule-card">
-      <h2>Dnešní nabídka aktivit</h2>
+      <h2>Aktivity během celého turnusu</h2>
       <div id="dash-schedule-preview"></div>
     </div>
-    <div class="quick-actions" id="dash-quick-actions">
-      <button class="quick-action" style="background:linear-gradient(135deg,var(--green),#388E3C)" onclick="showScreen('activities')"><span class="icon">🏃</span>Zapsat aktivitu</button>
-      <button class="quick-action" style="background:linear-gradient(135deg,var(--blue),#1565C0)" onclick="showScreen('km')"><span class="icon">🚶</span>Zapsat km</button>
-    </div>
-    <div id="dash-program-warning" class="warning-box" style="display:none;margin:0 0 12px 0"></div>
   </div>
 
   <!-- ACTIVITIES -->
@@ -1128,37 +1140,63 @@ function renderDashboard() {
   document.getElementById('dash-date').textContent = formatDate(today);
   const active = isProgramActive(data);
   const warnEl = document.getElementById('dash-program-warning');
-  const quickEl = document.getElementById('dash-quick-actions');
   if (!active) {
     const msg = today < data.settings.programStart
       ? 'Program začíná ' + formatDate(data.settings.programStart)
       : 'Program skončil ' + formatDate(data.settings.programEnd);
     warnEl.innerHTML = msg;
     warnEl.style.display = 'block';
-    quickEl.style.display = 'none';
+    document.getElementById('dash-activity-card').style.display = 'none';
+    document.getElementById('dash-km-card').style.display = 'none';
   } else {
     warnEl.style.display = 'none';
-    quickEl.style.display = '';
+    document.getElementById('dash-activity-card').style.display = '';
+    document.getElementById('dash-km-card').style.display = '';
   }
+
+  // --- Dnešní aktivita ---
+  const actContent = document.getElementById('dash-activity-content');
   const rec = getTodayRecord(child);
-  const list = document.getElementById('dash-today-list');
-  const empty = document.getElementById('dash-today-empty');
-  const items = [];
+  const todaySched = data.schedule[today];
+  const hasTodayProgram = todaySched && todaySched.slots && todaySched.slots.length > 0;
+  let actHtml = '';
   if (rec.activity) {
-    const canRemove = active && isCancellable(rec.activity, data, today);
-    const removeBtn = canRemove
-      ? '<button class="remove-btn" onclick="removeTodayActivity()" title="Odebrat">✕</button>'
-      : '<span style="font-size:.7rem;color:var(--gray)">🔒</span>';
-    items.push('<li><span>' + (rec.activity.icon || '🏃') + ' ' + esc(rec.activity.name) + ' <strong>(+' + rec.activity.points + ' ' + bodyCz(rec.activity.points) + ')</strong></span>' + removeBtn + '</li>');
+    const canChange = active && isCancellable(rec.activity, data, today);
+    const minutesLeft = getCancelMinutesLeft(rec.activity, data, today);
+    actHtml += '<div class="dash-act-box green">';
+    actHtml += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    actHtml += '<span style="font-size:1.1rem">' + (rec.activity.icon || '🏃') + ' <strong>' + esc(rec.activity.name) + '</strong></span>';
+    actHtml += '<span style="font-weight:700;color:var(--green)">+' + rec.activity.points + ' ' + bodyCz(rec.activity.points) + '</span>';
+    actHtml += '</div>';
+    if (canChange) {
+      actHtml += '<div style="margin-top:6px;font-size:.8rem;color:var(--gray)">Na změnu zbývá ' + minutesLeft + ' min &middot; <button class="remove-btn" onclick="removeTodayActivity()" style="font-size:.8rem;color:var(--red);background:none;border:none;cursor:pointer;text-decoration:underline">Změnit</button></div>';
+    } else {
+      actHtml += '<div style="margin-top:6px;font-size:.8rem;color:var(--gray)">🔒 Uzamčeno</div>';
+    }
+    actHtml += '</div>';
+  } else if (hasTodayProgram && active) {
+    const minutesLeft = getCancelMinutesLeft({}, data, today);
+    const beforeDeadline = isBeforeDeadline(data, today);
+    actHtml += '<div class="dash-act-box orange">';
+    actHtml += '<div style="font-weight:700;color:#E65100">Ještě sis nevybral/a aktivitu na dnešek!</div>';
+    if (beforeDeadline) {
+      actHtml += '<div style="margin-top:6px;font-size:.85rem">Zbývá ' + minutesLeft + ' min do uzávěrky &middot; <a href="#" onclick="showScreen(\'activities\');return false" style="color:var(--blue);font-weight:700">Vyber si &rarr;</a></div>';
+    } else {
+      actHtml += '<div style="margin-top:6px;font-size:.85rem;color:var(--gray)">Uzávěrka vypršela</div>';
+    }
+    actHtml += '</div>';
+  } else {
+    actHtml += '<div class="dash-act-box gray"><span style="color:var(--gray)">Na dnešek není naplánovaný program</span></div>';
   }
   if (rec.km > 0) {
-    const kmBtn = (!active || isKmLocked(data)) ? '<span style="font-size:.7rem;color:var(--gray)">🔒</span>' : '<button class="remove-btn" onclick="resetTodayKm()">✕</button>';
-    items.push('<li><span>🚶 ' + rec.km + ' km <strong>(+' + rec.km + ' ' + bodyCz(rec.km) + ')</strong></span>' + kmBtn + '</li>');
+    actHtml += '<div style="margin-top:6px;font-size:.85rem;color:var(--gray)">🚶 Dnes nachodil/a: <strong>' + rec.km + ' km</strong> (+' + rec.km + ' ' + bodyCz(rec.km) + ')</div>';
   }
-  if (items.length === 0) { list.innerHTML = ''; empty.style.display = 'block'; }
-  else { list.innerHTML = items.join(''); empty.style.display = 'none'; }
+  actContent.innerHTML = actHtml;
 
-  // Schedule preview — show all scheduled dates
+  // --- Km ovládání ---
+  renderDashKm(data, child, active);
+
+  // --- Přehled turnusu (zmenšené karty) ---
   const scheduledDates = getScheduledDates(data);
   const preview = document.getElementById('dash-schedule-preview');
   if (scheduledDates.length === 0) {
@@ -1171,23 +1209,68 @@ function renderDashboard() {
       const dateLabel = isToday ? '📅 Dnes (' + formatDateShort(date) + ')' : '📅 ' + formatDateShort(date);
       const childRec = getRecord(child, date);
       const hasDone = childRec.activity;
-      schedHtml += '<div style="margin-bottom:12px">';
-      schedHtml += '<div style="font-weight:700;font-size:.9rem;margin-bottom:6px;color:' + (isToday ? 'var(--blue)' : '#555') + '">' + dateLabel;
-      if (sched.timeSlot) schedHtml += ' <span style="font-weight:400;font-size:.8rem;color:var(--gray)">⏰ ' + esc(sched.timeSlot) + '</span>';
+      schedHtml += '<div style="margin-bottom:10px">';
+      schedHtml += '<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;color:' + (isToday ? 'var(--blue)' : '#555') + '">' + dateLabel;
+      if (sched.timeSlot) schedHtml += ' <span style="font-weight:400;font-size:.75rem;color:var(--gray)">⏰ ' + esc(sched.timeSlot) + '</span>';
       if (hasDone) schedHtml += ' <span style="color:var(--green)">✓</span>';
       schedHtml += '</div>';
-      schedHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+      schedHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px">';
       sched.slots.forEach(s => {
         const act = getActivity(data, s.activityId);
         const actName = act ? act.name : '?';
         const signups = getActivitySignups(data, date, s.activityId);
-        const locIcon = getLocationIcon(data, s.locationId);
-        schedHtml += '<div style="padding:10px;border-radius:var(--radius-sm);background:var(--gray-light);text-align:center;font-size:.8rem"><span style="font-size:1.4rem;display:block">' + (s.icon || '🏃') + '</span><strong>' + esc(actName) + '</strong><br><span style="color:var(--gray);font-size:.7rem">' + locIcon + ' ' + getLocationName(data, s.locationId) + '</span><br><span style="font-size:.7rem;font-weight:700;color:' + (signups >= s.maxKids ? 'var(--red)' : 'var(--green)') + '">' + signups + '/' + s.maxKids + '</span></div>';
+        schedHtml += '<div class="dash-act-mini"><span class="dash-act-mini-icon">' + (s.icon || '🏃') + '</span><strong>' + esc(actName) + '</strong><span style="color:' + (signups >= s.maxKids ? 'var(--red)' : 'var(--green)') + ';font-weight:700">' + signups + '/' + s.maxKids + '</span></div>';
       });
       schedHtml += '</div></div>';
     });
     preview.innerHTML = schedHtml;
   }
+}
+
+function renderDashKm(data, child, active) {
+  const lockMsg = document.getElementById('dash-km-lock-msg');
+  const controls = document.getElementById('dash-km-controls');
+  if (!active) {
+    lockMsg.style.display = 'block';
+    lockMsg.innerHTML = 'Záznam kilometrů je dostupný jen během programu.';
+    controls.style.display = 'none';
+    return;
+  }
+  const rec = getTodayRecord(child);
+  const locked = isKmLocked(data);
+  document.getElementById('dash-km-today-saved').textContent = rec.km || 0;
+  document.getElementById('dash-km-slider').value = rec.km || 0;
+  document.getElementById('dash-km-value').textContent = rec.km || 0;
+  document.getElementById('dash-km-slider').disabled = locked;
+  lockMsg.style.display = locked ? 'block' : 'none';
+  lockMsg.innerHTML = 'Záznam kilometrů je uzavřen.<br><small style="font-weight:400">Kilometry lze zapisovat každý den do stanovené hodiny.</small>';
+  controls.style.display = locked ? 'none' : 'block';
+}
+
+function updateDashKmDisplay(val) { document.getElementById('dash-km-value').textContent = val; }
+
+function adjustDashKm(delta) {
+  const data = loadData();
+  if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
+  const slider = document.getElementById('dash-km-slider');
+  let val = Math.max(0, Math.min(20, Math.round((parseFloat(slider.value) + delta) * 2) / 2));
+  slider.value = val;
+  updateDashKmDisplay(val);
+}
+
+function saveDashKm() {
+  const data = loadData();
+  if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
+  const child = data.children.find(c => c.id === currentChildId);
+  if (!child) return;
+  const rec = getTodayRecord(child);
+  const val = parseFloat(document.getElementById('dash-km-slider').value);
+  rec.km = val;
+  rec.kmTimestamp = Date.now();
+  saveData(data);
+  document.getElementById('dash-km-today-saved').textContent = val;
+  renderDashboard();
+  toast('Uloženo: ' + val + ' km (+' + val + ' ' + bodyCz(val) + ')');
 }
 
 function removeTodayActivity() {
