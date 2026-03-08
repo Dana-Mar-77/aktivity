@@ -1806,6 +1806,8 @@ function toggleScheduleEducator(eduId, event) {
   const data = loadData();
   if (!data.schedule[scheduleDate]) data.schedule[scheduleDate] = { timeSlot: '13:30–14:30', slots: [] };
   const sched = data.schedule[scheduleDate];
+  const tsEl = document.getElementById('sched-timeslot');
+  if (tsEl) sched.timeSlot = tsEl.value.trim() || sched.timeSlot;
   const hasSlots = sched.slots.some(s => s.educatorId === eduId);
   if (hasSlots) {
     // Uncheck — remove all slots for this educator
@@ -1834,6 +1836,8 @@ function toggleScheduleSlot(eduId, actId) {
   const data = loadData();
   if (!data.schedule[scheduleDate]) data.schedule[scheduleDate] = { timeSlot: '13:30–14:30', slots: [] };
   const sched = data.schedule[scheduleDate];
+  const tsEl = document.getElementById('sched-timeslot');
+  if (tsEl) sched.timeSlot = tsEl.value.trim() || sched.timeSlot;
   const idx = sched.slots.findIndex(s => s.educatorId === eduId && s.activityId === actId);
   if (idx >= 0) {
     // Deselect — remove this slot
