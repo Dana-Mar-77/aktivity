@@ -215,6 +215,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <button class="btn btn-blue btn-block mb-8" onclick="showLogin()">Přihlásit se</button>
       <div class="divider"></div>
       <button class="btn btn-gray btn-block btn-sm" onclick="showAdminLogin()">Admin</button>
+      <button class="btn btn-gray btn-block btn-sm mt-8" onclick="showHostLogin()">Host</button>
     </div>
     <div id="register-form" class="card" style="display:none">
       <h2>Registrace</h2>
@@ -243,6 +244,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="form-group"><label>Heslo</label><input type="password" id="admin-pass" placeholder="Zadejte heslo"></div>
       <button class="btn btn-gray btn-block" onclick="loginAdmin()">Přihlásit</button>
       <button class="btn btn-outline btn-block btn-sm mt-8" onclick="hideAdminLogin()">Zpět</button>
+    </div>
+    <div id="host-login" class="card" style="display:none">
+      <h2>Host přihlášení</h2>
+      <div class="form-group"><label>Heslo</label><input type="password" id="host-pass" placeholder="Zadejte heslo"></div>
+      <button class="btn btn-gray btn-block" onclick="loginHost()">Vstoupit</button>
+      <button class="btn btn-outline btn-block btn-sm mt-8" onclick="hideHostLogin()">Zpět</button>
     </div>
   </div>
 
@@ -316,6 +323,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <div id="screen-profiles" class="screen">
     <div class="card"><h2>Všechny děti</h2><div id="profiles-grid" class="profiles-grid"></div></div>
     <div id="profile-detail" style="display:none"></div>
+  </div>
+
+  <!-- HOST -->
+  <div id="screen-host" class="screen">
+    <div class="card">
+      <div class="flex-between mb-8"><h2 style="margin-bottom:0">Program</h2><button class="btn btn-sm btn-red" onclick="logoutHost()">Odhlásit</button></div>
+    </div>
+    <div id="host-content"></div>
   </div>
 
   <!-- ADMIN -->
@@ -595,6 +610,7 @@ function refreshCurrentScreen() {
   else if (id === 'leaderboard') renderLeaderboard();
   else if (id === 'profiles') renderProfiles();
   else if (id === 'admin') renderAdmin();
+  else if (id === 'host') renderHost();
 }
 
 function getToday() { return new Date().toISOString().slice(0, 10); }
@@ -691,6 +707,8 @@ function parseTimeSlotStart(timeSlot) {
 // ============ STATE ============
 let currentChildId = null;
 let isAdmin = false;
+let isHost = false;
+let hostDate = getToday();
 let currentFilter = 'all';
 let currentSubFilter = 'all';
 let selectedLoginId = null;
@@ -713,6 +731,7 @@ function showScreen(name) {
   if (name === 'leaderboard') renderLeaderboard();
   if (name === 'profiles') renderProfiles();
   if (name === 'admin') renderAdmin();
+  if (name === 'host') renderHost();
 }
 
 function showNav(show) { document.getElementById('bottom-nav').style.display = show ? 'flex' : 'none'; }
@@ -769,6 +788,7 @@ function showRegister() {
   document.getElementById('register-form').style.display = 'block';
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('admin-login').style.display = 'none';
+  document.getElementById('host-login').style.display = 'none';
   renderGroupOptions();
 }
 function hideRegister() { document.getElementById('register-form').style.display = 'none'; }
@@ -776,6 +796,7 @@ function showLogin() {
   document.getElementById('login-form').style.display = 'block';
   document.getElementById('register-form').style.display = 'none';
   document.getElementById('admin-login').style.display = 'none';
+  document.getElementById('host-login').style.display = 'none';
   renderLoginList();
 }
 function hideLogin() { document.getElementById('login-form').style.display = 'none'; selectedLoginId = null; }
@@ -783,6 +804,7 @@ function showAdminLogin() {
   document.getElementById('admin-login').style.display = 'block';
   document.getElementById('register-form').style.display = 'none';
   document.getElementById('login-form').style.display = 'none';
+  document.getElementById('host-login').style.display = 'none';
 }
 function hideAdminLogin() { document.getElementById('admin-login').style.display = 'none'; }
 
@@ -886,6 +908,132 @@ async function loginAdmin() {
 }
 
 function logoutAdmin() { isAdmin = false; document.querySelector('.app-container').classList.remove('admin-wide'); showScreen('auth'); }
+
+// ============ HOST ============
+function showHostLogin() {
+  document.getElementById('host-login').style.display = 'block';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('admin-login').style.display = 'none';
+}
+function hideHostLogin() { document.getElementById('host-login').style.display = 'none'; }
+
+function loginHost() {
+  const pass = document.getElementById('host-pass').value;
+  if (pass !== 'host') { toast('Špatné heslo!'); return; }
+  isHost = true;
+  hostDate = getToday();
+  hideHostLogin();
+  showNav(false);
+  showScreen('host');
+  toast('Host přihlášen');
+}
+
+function logoutHost() { isHost = false; showScreen('auth'); }
+
+function hostSelectDate(date) {
+  hostDate = date;
+  renderHost();
+}
+
+function renderHost() {
+  const data = loadData();
+  const container = document.getElementById('host-content');
+  const pStart = data.settings.programStart;
+  const pEnd = data.settings.programEnd;
+  const days = getDaysBetween(pStart, pEnd);
+  const today = getToday();
+
+  if (hostDate < pStart || hostDate > pEnd) hostDate = today >= pStart && today <= pEnd ? today : pStart;
+
+  let html = '';
+
+  // Calendar grid
+  html += '<div class="card">';
+  html += '<div class="program-info-row">' + days.length + ' dnů &middot; Vybráno: <strong>' + formatDateShort(hostDate) + '</strong></div>';
+  html += '<div class="day-selector-grid">';
+  days.forEach(d => {
+    const summary = getDaySummary(data, d);
+    const dayNum = parseInt(d.split('-')[2], 10);
+    const abbr = getDayAbbr(d);
+    const dow = new Date(d + 'T00:00:00').getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isSelected = d === hostDate;
+    const isToday = d === today;
+    let cls = 'day-tile';
+    if (isSelected) cls += ' selected';
+    if (summary.hasSchedule) cls += ' has-schedule';
+    if (isWeekend) cls += ' weekend';
+    if (isToday) cls += ' today-marker';
+    html += '<div class="' + cls + '" onclick="hostSelectDate(\'' + d + '\')">';
+    html += '<span class="day-num">' + dayNum + '</span>';
+    html += '<span class="day-abbr">' + abbr + '</span>';
+    if (summary.activityCount > 0) {
+      html += '<span class="day-act-count">' + summary.activityCount + ' akt.</span>';
+    }
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  // Day detail
+  const sched = data.schedule[hostDate];
+  html += '<div class="card">';
+  html += '<h3 class="mb-8">' + formatDate(hostDate) + ' (' + getDayAbbr(hostDate) + ')</h3>';
+
+  if (sched && sched.timeSlot) {
+    html += '<div style="font-size:.85rem;color:var(--gray);margin-bottom:12px">&#128339; ' + esc(sched.timeSlot) + '</div>';
+  }
+
+  if (sched && sched.slots && sched.slots.length > 0) {
+    const signedUpIds = new Set();
+    sched.slots.forEach(slot => {
+      const act = getActivity(data, slot.activityId);
+      const actName = act ? act.name : '?';
+      const signups = getActivitySignups(data, hostDate, slot.activityId);
+      const children = data.children.filter(c => {
+        const r = c.records && c.records[hostDate];
+        return r && r.activity && r.activity.activityId === slot.activityId;
+      });
+      children.forEach(c => signedUpIds.add(c.id));
+      const ptsClass = slot.points <= 10 ? 'pts-10' : slot.points <= 20 ? 'pts-20' : 'pts-30';
+      const fullCls = signups >= slot.maxKids ? ' full' : '';
+      html += '<div class="overview-slot ' + ptsClass + '">';
+      html += '<div class="overview-slot-header"><strong>' + (slot.icon || '🏃') + ' ' + esc(actName) + '</strong>';
+      html += '<span class="overview-slot-count' + fullCls + '">' + signups + '/' + slot.maxKids + '</span></div>';
+      html += '<div class="overview-slot-edu">👩‍🏫 ' + esc(getEducatorName(data, slot.educatorId));
+      const loc = slot.locationId ? ' &middot; ' + getLocationIcon(data, slot.locationId) + ' ' + esc(getLocationName(data, slot.locationId)) : '';
+      html += loc + '</div>';
+      if (children.length > 0) {
+        html += '<div class="overview-children">';
+        children.forEach(c => {
+          const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
+          html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="font-size:.8rem;color:var(--gray)">Zatím nikdo</div>';
+      }
+      html += '</div>';
+    });
+
+    // Children without activity
+    const unsigned = data.children.filter(c => !signedUpIds.has(c.id));
+    if (unsigned.length > 0) {
+      html += '<div style="margin-top:12px"><h3 style="color:var(--red);margin-bottom:8px">Bez aktivity (' + unsigned.length + ')</h3>';
+      html += '<div class="overview-unsigned">';
+      unsigned.forEach(c => {
+        const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
+        html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+      });
+      html += '</div></div>';
+    }
+  } else {
+    html += '<div class="empty-state"><div class="empty-icon">📅</div><p>Na tento den není naplánovaný program.</p></div>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
 
 // ============ DASHBOARD ============
 function renderDashboard() {
