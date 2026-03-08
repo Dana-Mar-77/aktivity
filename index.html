@@ -275,13 +275,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     </div>
     <div class="card" id="dash-km-card">
       <h2>Kilometry</h2>
-      <div id="dash-km-lock-msg" class="warning-box" style="display:none">Záznam kilometrů je uzavřen.<br><small style="font-weight:400">Kilometry lze zapisovat každý den do stanovené hodiny.</small></div>
-      <div id="dash-km-controls">
-        <div class="km-display"><span id="dash-km-value">0</span> <small>km</small></div>
-        <input type="range" class="km-slider" id="dash-km-slider" min="0" max="20" step="0.5" value="0" oninput="updateDashKmDisplay(this.value)">
-        <div class="km-buttons"><button class="btn btn-sm btn-outline" onclick="adjustDashKm(-1)">-1</button><button class="btn btn-sm btn-outline" onclick="adjustDashKm(-0.5)">-0.5</button><button class="btn btn-sm btn-outline" onclick="adjustDashKm(0.5)">+0.5</button><button class="btn btn-sm btn-outline" onclick="adjustDashKm(1)">+1</button></div>
-        <div class="mt-16 text-center"><p style="font-size:.85rem;color:var(--gray);margin-bottom:8px">Dnes zapsáno: <strong id="dash-km-today-saved">0</strong> km</p><button class="btn btn-blue btn-block" onclick="saveDashKm()">Uložit kilometry</button></div>
-      </div>
+      <div id="dash-km-content"></div>
     </div>
     <div class="card" id="dash-schedule-card">
       <h2>Aktivity během celého turnusu</h2>
@@ -1186,14 +1180,11 @@ function renderDashboard() {
     }
     actHtml += '</div>';
   } else {
-    actHtml += '<div class="dash-act-box gray"><span style="color:var(--gray)">Na dnešek není naplánovaný program</span></div>';
-  }
-  if (rec.km > 0) {
-    actHtml += '<div style="margin-top:6px;font-size:.85rem;color:var(--gray)">🚶 Dnes nachodil/a: <strong>' + rec.km + ' km</strong> (+' + rec.km + ' ' + bodyCz(rec.km) + ')</div>';
+    actHtml += '<div class="dash-act-box gray"><span style="color:var(--gray)">Na dnešek není naplánovaná volitelná pohybová aktivita</span></div>';
   }
   actContent.innerHTML = actHtml;
 
-  // --- Km ovládání ---
+  // --- Km info ---
   renderDashKm(data, child, active);
 
   // --- Přehled turnusu (zmenšené karty) ---
@@ -1228,49 +1219,31 @@ function renderDashboard() {
 }
 
 function renderDashKm(data, child, active) {
-  const lockMsg = document.getElementById('dash-km-lock-msg');
-  const controls = document.getElementById('dash-km-controls');
-  if (!active) {
-    lockMsg.style.display = 'block';
-    lockMsg.innerHTML = 'Záznam kilometrů je dostupný jen během programu.';
-    controls.style.display = 'none';
-    return;
-  }
+  const container = document.getElementById('dash-km-content');
   const rec = getTodayRecord(child);
   const locked = isKmLocked(data);
-  document.getElementById('dash-km-today-saved').textContent = rec.km || 0;
-  document.getElementById('dash-km-slider').value = rec.km || 0;
-  document.getElementById('dash-km-value').textContent = rec.km || 0;
-  document.getElementById('dash-km-slider').disabled = locked;
-  lockMsg.style.display = locked ? 'block' : 'none';
-  lockMsg.innerHTML = 'Záznam kilometrů je uzavřen.<br><small style="font-weight:400">Kilometry lze zapisovat každý den do stanovené hodiny.</small>';
-  controls.style.display = locked ? 'none' : 'block';
-}
-
-function updateDashKmDisplay(val) { document.getElementById('dash-km-value').textContent = val; }
-
-function adjustDashKm(delta) {
-  const data = loadData();
-  if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
-  const slider = document.getElementById('dash-km-slider');
-  let val = Math.max(0, Math.min(20, Math.round((parseFloat(slider.value) + delta) * 2) / 2));
-  slider.value = val;
-  updateDashKmDisplay(val);
-}
-
-function saveDashKm() {
-  const data = loadData();
-  if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
-  const child = data.children.find(c => c.id === currentChildId);
-  if (!child) return;
-  const rec = getTodayRecord(child);
-  const val = parseFloat(document.getElementById('dash-km-slider').value);
-  rec.km = val;
-  rec.kmTimestamp = Date.now();
-  saveData(data);
-  document.getElementById('dash-km-today-saved').textContent = val;
-  renderDashboard();
-  toast('Uloženo: ' + val + ' km (+' + val + ' ' + bodyCz(val) + ')');
+  const cutoffHour = data.settings.kmCutoffHour || 21;
+  let html = '';
+  if (rec.km > 0) {
+    html += '<div style="font-size:1.1rem;margin-bottom:6px">🚶 Dnes nachodil/a: <strong style="color:var(--blue)">' + rec.km + ' km</strong> <span style="color:var(--green);font-weight:700">(+' + rec.km + ' ' + bodyCz(rec.km) + ')</span></div>';
+  } else {
+    html += '<div class="dash-act-box orange" style="margin-bottom:8px"><div style="font-weight:700;color:#E65100">Ještě nemáš zapsané kilometry za dnešek!</div>';
+    html += '<div style="margin-top:4px;font-size:.85rem"><a href="#" onclick="showScreen(\'km\');return false" style="color:var(--blue);font-weight:700">Zapiš kilometry &rarr;</a></div></div>';
+  }
+  if (locked) {
+    html += '<div style="font-size:.8rem;color:var(--gray)">🔒 Záznam uzavřen (uzávěrka v ' + cutoffHour + ':00)</div>';
+  } else if (active) {
+    const now = new Date();
+    const cutoff = new Date(); cutoff.setHours(cutoffHour, 0, 0, 0);
+    const diffMs = cutoff - now;
+    if (diffMs > 0) {
+      const h = Math.floor(diffMs / 3600000);
+      const m = Math.floor((diffMs % 3600000) / 60000);
+      const timeStr = h > 0 ? h + ' h ' + m + ' min' : m + ' min';
+      html += '<div style="font-size:.8rem;color:var(--gray)">⏰ Na zápis nebo změnu zbývá <strong>' + timeStr + '</strong> (do ' + cutoffHour + ':00)</div>';
+    }
+  }
+  container.innerHTML = html;
 }
 
 function removeTodayActivity() {
