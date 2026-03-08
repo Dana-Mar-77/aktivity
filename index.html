@@ -1272,8 +1272,11 @@ function renderActivities() {
   let infoHtml = dateTabsHtml;
   if (dateActivity) {
     if (canCancel) {
-      const mins = getCancelMinutesLeft(dateActivity, data, selDate);
-      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + ' b)<br><small style="font-weight:400">Můžeš změnit do ' + mins + ' min před začátkem — klikni na aktivitu pro zrušení</small></div>';
+      const minsLeft = getCancelMinutesLeft(dateActivity, data, selDate);
+      const h = Math.floor(minsLeft / 60);
+      const m = minsLeft % 60;
+      const timeLeft = h > 0 ? h + ' h ' + (m > 0 ? m + ' min' : '') : m + ' min';
+      infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + ' b)<br><small style="font-weight:400">Na změnu zbývá ' + timeLeft + ' — klikni na aktivitu pro zrušení</small></div>';
     } else {
       infoHtml += '<div class="success-box">✅ Aktivita na ' + formatDateShort(selDate) + ': <strong>' + esc(dateActivity.name) + '</strong> (+' + dateActivity.points + ' b)<br><small style="font-weight:400;color:var(--gray)">Aktivita je uzamčena</small></div>';
     }
