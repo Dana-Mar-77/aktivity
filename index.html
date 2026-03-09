@@ -534,8 +534,10 @@ function mergeData(local, remote) {
     const remoteChild = remoteMap[localChild.id];
     if (!remoteChild) {
       // Child exists locally but not remotely
-      // Check if it was explicitly deleted (in either local or remote deletedChildren list)
-      const deletedIds = [].concat(local.deletedChildren || [], remote.deletedChildren || []);
+      // Check if deleted — use the side with newer admin data
+      const deletedIds = localAdminTs >= remoteAdminTs
+        ? (local.deletedChildren || [])
+        : (remote.deletedChildren || []);
       if (deletedIds.includes(localChild.id)) return; // deleted by admin — don't re-add
       // Otherwise keep it (new registration not yet synced)
       merged.children.push(JSON.parse(JSON.stringify(localChild)));
@@ -607,9 +609,12 @@ function mergeData(local, remote) {
       remoteChild.photo = localChild.photo;
     }
   });
-  // Merge deletedChildren lists from both sides
-  const allDeleted = [].concat(local.deletedChildren || [], remote.deletedChildren || []);
-  merged.deletedChildren = [...new Set(allDeleted)];
+  // Merge deletedChildren: use the side with newer admin data (only admin deletes children)
+  if (localAdminTs >= remoteAdminTs) {
+    merged.deletedChildren = [...(local.deletedChildren || [])];
+  } else {
+    merged.deletedChildren = [...(remote.deletedChildren || [])];
+  }
   // Remove any children from merged that are in the deleted list
   merged.children = merged.children.filter(c => !merged.deletedChildren.includes(c.id));
   return merged;
@@ -2844,12 +2849,25 @@ function restoreBackup(idx) {
         if (remote.settings.adminPassword && !isHashed(remote.settings.adminPassword)) {
           remote.settings.adminPassword = await hashPassword(remote.settings.adminPassword);
         }
-        // Merge remote data with local — never blindly overwrite
+        // Skip if remote data is identical to local (echo of our own push)
         const local = _cache || loadData();
+        const localJson = JSON.stringify(local);
+        const remoteJson = JSON.stringify(remote);
+        if (localJson === remoteJson) return;
+        // Merge remote data with local — never blindly overwrite
         const merged = mergeData(local, remote);
+        const mergedJson = JSON.stringify(merged);
         _cache = merged;
         localStorage.setItem('kretin_v2', JSON.stringify(merged));
-        refreshCurrentScreen();
+        // If merge result differs from remote, push correction back to Supabase
+        // (e.g. local had newer data that remote was missing)
+        if (mergedJson !== remoteJson) {
+          pushToSupabase(JSON.parse(mergedJson));
+        }
+        // Only refresh screen if data actually changed from our perspective
+        if (mergedJson !== localJson) {
+          refreshCurrentScreen();
+        }
       }
     })
     .subscribe();
