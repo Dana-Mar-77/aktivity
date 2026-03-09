@@ -576,7 +576,7 @@ function mergeData(local, remote) {
       remoteChild.gender = localChild.gender;
       remoteChild.group = localChild.group;
       remoteChild.subgroup = localChild.subgroup;
-      remoteChild.pin = localChild.pin;
+      remoteChild.pin = String(localChild.pin);
       remoteChild._profileUpdatedAt = localProfileTs;
     }
     if (localChild.photo && !remoteChild.photo) remoteChild.photo = localChild.photo;
