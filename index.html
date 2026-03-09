@@ -3,7 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
+<script>
+// Force reload if running old code (before sync fix v2)
+var KRETIN_CODE_VERSION = 2;
+var lastCodeVer = parseInt(localStorage.getItem('kretin_code_ver') || '0');
+if (lastCodeVer < KRETIN_CODE_VERSION) {
+  localStorage.setItem('kretin_code_ver', String(KRETIN_CODE_VERSION));
+  if (lastCodeVer > 0) { location.reload(true); }
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
