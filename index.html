@@ -469,6 +469,12 @@ function migrateData(d) {
   if (!d.settings.programStart) d.settings.programStart = "2026-03-03";
   if (!d.settings.programEnd) d.settings.programEnd = "2026-03-31";
 
+  // Fix: remove wrongly-deleted children IDs (one-time cleanup on every device)
+  if (d.deletedChildren) {
+    var wrongIds = ['mmhw8uyolifh','mmhxmaxzyq4i','mmde2vbs9so5','mmde4jjoc3xv','mmde7djripp1'];
+    d.deletedChildren = d.deletedChildren.filter(function(id) { return wrongIds.indexOf(id) === -1; });
+  }
+
   return d;
 }
 
