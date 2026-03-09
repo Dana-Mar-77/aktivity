@@ -509,6 +509,7 @@ async function pushToSupabase(data) {
 }
 
 // Deep merge: merge remote data INTO local, keeping newer child records
+// Principle: NEVER lose data — prefer keeping data over losing it
 function mergeData(local, remote) {
   if (!local || !local.children || local.children.length === 0) return remote;
   if (!remote || !remote.children) return local;
@@ -526,20 +527,26 @@ function mergeData(local, remote) {
     merged._adminDataUpdatedAt = localAdminTs;
   }
 
+  // deletedChildren: local wins ONLY if strictly newer, otherwise remote (Supabase) is source of truth
+  const winningDeleted = localAdminTs > remoteAdminTs
+    ? (local.deletedChildren || [])
+    : (remote.deletedChildren || []);
+  merged.deletedChildren = [...winningDeleted];
+
   // Build lookup of remote children by id
   const remoteMap = {};
   (merged.children || []).forEach(c => { remoteMap[c.id] = c; });
+
+  // Also build lookup of local children by id
+  const localMap = {};
+  (local.children || []).forEach(c => { localMap[c.id] = c; });
+
   // Merge each local child's records into remote
   (local.children || []).forEach(localChild => {
     const remoteChild = remoteMap[localChild.id];
     if (!remoteChild) {
-      // Child exists locally but not remotely
-      // Check if deleted — use the side with newer admin data
-      const deletedIds = localAdminTs >= remoteAdminTs
-        ? (local.deletedChildren || [])
-        : (remote.deletedChildren || []);
-      if (deletedIds.includes(localChild.id)) return; // deleted by admin — don't re-add
-      // Otherwise keep it (new registration not yet synced)
+      // Child exists locally but not remotely — keep unless explicitly deleted
+      if (merged.deletedChildren.includes(localChild.id)) return;
       merged.children.push(JSON.parse(JSON.stringify(localChild)));
       return;
     }
@@ -555,53 +562,56 @@ function mergeData(local, remote) {
       remoteChild.pin = localChild.pin;
       remoteChild._profileUpdatedAt = localProfileTs;
     }
-    // Merge records: for each date, keep the one with more data / newer timestamp
+    // Merge records: for each date, keep the one with newer timestamp
     if (!localChild.records) return;
     if (!remoteChild.records) remoteChild.records = {};
     for (const date in localChild.records) {
       const lr = localChild.records[date];
       const rr = remoteChild.records[date];
       if (!rr) {
-        // Date exists only locally — keep local
         remoteChild.records[date] = JSON.parse(JSON.stringify(lr));
         continue;
       }
-      // Merge activity: respect timestamps and cancellations
+      // --- Merge activity ---
       const lCancelled = lr.activityCancelledAt || 0;
       const rCancelled = rr.activityCancelledAt || 0;
       const lActTs = lr.activity ? (lr.activity.timestamp || 0) : 0;
       const rActTs = rr.activity ? (rr.activity.timestamp || 0) : 0;
-      // Find the latest event (activity set or cancelled)
       const lLatest = Math.max(lActTs, lCancelled);
       const rLatest = Math.max(rActTs, rCancelled);
       if (lLatest > rLatest) {
-        // Local is newer — use local state
         rr.activity = lr.activity ? JSON.parse(JSON.stringify(lr.activity)) : null;
-        if (lr.activityCancelledAt) rr.activityCancelledAt = lr.activityCancelledAt;
+        rr.activityCancelledAt = lr.activityCancelledAt || 0;
+      } else if (rLatest > lLatest) {
+        // Remote is newer — already in merged, just ensure activityCancelledAt is set
+        if (!rr.activityCancelledAt && rCancelled) rr.activityCancelledAt = rCancelled;
       } else if (lLatest === rLatest && lLatest > 0) {
-        // Same timestamp — keep whichever has data
+        // Same timestamp — keep whichever has data (prefer data over null)
         if (lr.activity && !rr.activity) {
           rr.activity = JSON.parse(JSON.stringify(lr.activity));
         }
-      }
-      // If both are 0 (no timestamp = legacy records), prefer local state
-      // because local represents the most recent action on this device
-      if (lLatest === 0 && rLatest === 0) {
+      } else {
+        // Both timestamps 0 (legacy) — KEEP data, never delete
         if (lr.activity && !rr.activity) {
           rr.activity = JSON.parse(JSON.stringify(lr.activity));
-        } else if (!lr.activity && rr.activity) {
-          // Local is null = admin/child deleted it; respect deletion over old timestamp:0 record
-          rr.activity = null;
         }
+        // If remote has activity but local doesn't AND local has no cancel timestamp,
+        // keep remote's activity (it's data, don't lose it)
       }
-      // Merge km: use timestamp if available, otherwise keep higher value
+      // --- Merge km ---
       const lkmt = lr.kmTimestamp || 0;
       const rkmt = rr.kmTimestamp || 0;
       if (lkmt > rkmt) {
         rr.km = lr.km;
         rr.kmTimestamp = lr.kmTimestamp;
-      } else if (lkmt === rkmt && (lr.km || 0) > (rr.km || 0)) {
-        rr.km = lr.km;
+      } else if (rkmt > lkmt) {
+        // Remote is newer — already in merged
+      } else {
+        // Same timestamp or both 0 — keep higher value (never lose km)
+        if ((lr.km || 0) > (rr.km || 0)) {
+          rr.km = lr.km;
+          if (lr.kmTimestamp) rr.kmTimestamp = lr.kmTimestamp;
+        }
       }
     }
     // Preserve local child's photo if remote doesn't have it
@@ -609,13 +619,12 @@ function mergeData(local, remote) {
       remoteChild.photo = localChild.photo;
     }
   });
-  // Merge deletedChildren: use the side with newer admin data (only admin deletes children)
-  if (localAdminTs >= remoteAdminTs) {
-    merged.deletedChildren = [...(local.deletedChildren || [])];
-  } else {
-    merged.deletedChildren = [...(remote.deletedChildren || [])];
-  }
-  // Remove any children from merged that are in the deleted list
+
+  // Safety: children in remote but NOT in local — keep them (never lose children)
+  // They're already in merged from the remote base. Just make sure they survive.
+  // (Only deletedChildren filter below can remove them.)
+
+  // Remove ONLY children that are in the admin-authoritative deleted list
   merged.children = merged.children.filter(c => !merged.deletedChildren.includes(c.id));
   return merged;
 }
@@ -939,7 +948,7 @@ function registerChild() {
   const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
   if (duplicate) { toast('Dítě s tímto jménem již existuje! Použij Přihlásit se.'); return; }
   const id = genId();
-  data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, records: {} });
+  data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   saveData(data);
   regPhotoData = null;
   document.getElementById('reg-name').value = '';
@@ -1296,6 +1305,7 @@ function resetTodayKm() {
   if (!child) return;
   const rec = getTodayRecord(child);
   rec.km = 0;
+  rec.kmTimestamp = Date.now();
   saveData(data);
   renderDashboard();
   toast('Kilometry resetovány');
@@ -2421,7 +2431,7 @@ function adminSaveNewChild() {
   const data = loadData();
   const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
   if (duplicate) { toast('Dítě s tímto jménem již existuje!'); return; }
-  data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, records: {} });
+  data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   saveData(data);
   closeModal();
   renderAdminChildren();
