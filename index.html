@@ -487,6 +487,11 @@ function migrateData(d) {
     d.deletedChildren = d.deletedChildren.filter(function(id) { return wrongIds.indexOf(id) === -1; });
   }
 
+  // Ensure all PINs are strings
+  if (d.children) {
+    d.children.forEach(function(c) { if (c.pin != null) c.pin = String(c.pin); });
+  }
+
   return d;
 }
 
@@ -988,7 +993,7 @@ function loginChild() {
   const data = loadData();
   const child = data.children.find(c => c.id === selectedLoginId);
   if (!child) { toast('Dítě nenalezeno!'); return; }
-  if (child.pin !== pin) { toast('Špatný PIN!'); return; }
+  if (String(child.pin) !== String(pin)) { toast('Špatný PIN!'); return; }
   currentChildId = child.id;
   saveSession();
   hideLogin();
