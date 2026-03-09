@@ -2825,6 +2825,43 @@ function restoreBackup(idx) {
     console.warn('Supabase sync failed, using local data only');
   }
 
+  // Auto-recovery: if the 5 children are missing, restore from backup
+  (function recoverChildren() {
+    var data = loadData();
+    var criticalIds = ['mmhw8uyolifh','mmhxmaxzyq4i','mmde2vbs9so5','mmde4jjoc3xv','mmde7djripp1'];
+    var childIds = {};
+    data.children.forEach(function(c) { childIds[c.id] = true; });
+    var missingIds = criticalIds.filter(function(id) { return !childIds[id]; });
+    if (missingIds.length === 0) return; // all present, nothing to do
+    // Try to restore from backup
+    try {
+      var backups = JSON.parse(localStorage.getItem('kretin_v2_backup') || '[]');
+      var backup = null;
+      for (var i = 0; i < backups.length; i++) {
+        if (backups[i].date === '2026-03-09') { backup = backups[i]; break; }
+      }
+      if (!backup) return;
+      var restored = 0;
+      backup.data.children.forEach(function(bc) {
+        if (missingIds.indexOf(bc.id) !== -1) {
+          data.children.push(JSON.parse(JSON.stringify(bc)));
+          restored++;
+        }
+      });
+      if (restored > 0) {
+        // Remove their IDs from deletedChildren
+        data.deletedChildren = (data.deletedChildren || []).filter(function(id) {
+          return criticalIds.indexOf(id) === -1;
+        });
+        data._adminDataUpdatedAt = Date.now();
+        _cache = data;
+        localStorage.setItem('kretin_v2', JSON.stringify(data));
+        pushToSupabase(data);
+        console.log('Auto-recovery: restored ' + restored + ' children');
+      }
+    } catch(e) { console.error('Recovery failed:', e); }
+  })();
+
   // Auto backup once per day
   autoBackup();
 
