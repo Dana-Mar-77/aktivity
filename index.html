@@ -508,8 +508,8 @@ async function pushToSupabase(data) {
   }
 }
 
-// Deep merge: merge remote data INTO local, keeping newer child records
-// Principle: NEVER lose data — prefer keeping data over losing it
+// Deep merge: merge remote data INTO local
+// RULE: merge NEVER deletes data. Only explicit admin/user actions delete.
 function mergeData(local, remote) {
   if (!local || !local.children || local.children.length === 0) return remote;
   if (!remote || !remote.children) return local;
@@ -527,30 +527,24 @@ function mergeData(local, remote) {
     merged._adminDataUpdatedAt = localAdminTs;
   }
 
-  // deletedChildren: local wins ONLY if strictly newer, otherwise remote (Supabase) is source of truth
-  const winningDeleted = localAdminTs > remoteAdminTs
-    ? (local.deletedChildren || [])
-    : (remote.deletedChildren || []);
-  merged.deletedChildren = [...winningDeleted];
+  // deletedChildren: UNION from both sides (once deleted, stays deleted)
+  const allDeleted = [].concat(local.deletedChildren || [], remote.deletedChildren || []);
+  merged.deletedChildren = [...new Set(allDeleted)];
 
-  // Build lookup of remote children by id
+  // Build lookups
   const remoteMap = {};
   (merged.children || []).forEach(c => { remoteMap[c.id] = c; });
 
-  // Also build lookup of local children by id
-  const localMap = {};
-  (local.children || []).forEach(c => { localMap[c.id] = c; });
-
-  // Merge each local child's records into remote
+  // Merge each local child into remote
   (local.children || []).forEach(localChild => {
+    if (merged.deletedChildren.includes(localChild.id)) return; // admin deleted
     const remoteChild = remoteMap[localChild.id];
     if (!remoteChild) {
-      // Child exists locally but not remotely — keep unless explicitly deleted
-      if (merged.deletedChildren.includes(localChild.id)) return;
+      // Local-only child — add to merged
       merged.children.push(JSON.parse(JSON.stringify(localChild)));
       return;
     }
-    // Merge child profile: use newer _profileUpdatedAt
+    // Merge profile: newer wins
     const localProfileTs = localChild._profileUpdatedAt || 0;
     const remoteProfileTs = remoteChild._profileUpdatedAt || 0;
     if (localProfileTs > remoteProfileTs) {
@@ -562,17 +556,15 @@ function mergeData(local, remote) {
       remoteChild.pin = localChild.pin;
       remoteChild._profileUpdatedAt = localProfileTs;
     }
-    // Merge records: for each date, keep the one with newer timestamp
+    if (localChild.photo && !remoteChild.photo) remoteChild.photo = localChild.photo;
+    // Merge records
     if (!localChild.records) return;
     if (!remoteChild.records) remoteChild.records = {};
     for (const date in localChild.records) {
       const lr = localChild.records[date];
       const rr = remoteChild.records[date];
-      if (!rr) {
-        remoteChild.records[date] = JSON.parse(JSON.stringify(lr));
-        continue;
-      }
-      // --- Merge activity ---
+      if (!rr) { remoteChild.records[date] = JSON.parse(JSON.stringify(lr)); continue; }
+      // --- Activity: newer timestamp wins. When equal or both 0, KEEP data (never null) ---
       const lCancelled = lr.activityCancelledAt || 0;
       const rCancelled = rr.activityCancelledAt || 0;
       const lActTs = lr.activity ? (lr.activity.timestamp || 0) : 0;
@@ -580,52 +572,38 @@ function mergeData(local, remote) {
       const lLatest = Math.max(lActTs, lCancelled);
       const rLatest = Math.max(rActTs, rCancelled);
       if (lLatest > rLatest) {
+        // Local is strictly newer — use local state (even if null = cancelled)
         rr.activity = lr.activity ? JSON.parse(JSON.stringify(lr.activity)) : null;
-        rr.activityCancelledAt = lr.activityCancelledAt || 0;
-      } else if (rLatest > lLatest) {
-        // Remote is newer — already in merged, just ensure activityCancelledAt is set
-        if (!rr.activityCancelledAt && rCancelled) rr.activityCancelledAt = rCancelled;
-      } else if (lLatest === rLatest && lLatest > 0) {
-        // Same timestamp — keep whichever has data (prefer data over null)
-        if (lr.activity && !rr.activity) {
-          rr.activity = JSON.parse(JSON.stringify(lr.activity));
-        }
-      } else {
-        // Both timestamps 0 (legacy) — KEEP data, never delete
-        if (lr.activity && !rr.activity) {
-          rr.activity = JSON.parse(JSON.stringify(lr.activity));
-        }
-        // If remote has activity but local doesn't AND local has no cancel timestamp,
-        // keep remote's activity (it's data, don't lose it)
+        rr.activityCancelledAt = lr.activityCancelledAt || rr.activityCancelledAt;
+      } else if (lLatest === rLatest) {
+        // Same timestamp or both 0 — prefer whichever side HAS data
+        if (lr.activity && !rr.activity) rr.activity = JSON.parse(JSON.stringify(lr.activity));
       }
-      // --- Merge km ---
+      // If rLatest > lLatest: remote already in merged, nothing to do
+      // --- Km: newer timestamp wins. When equal or both 0, keep HIGHER value ---
       const lkmt = lr.kmTimestamp || 0;
       const rkmt = rr.kmTimestamp || 0;
-      if (lkmt > rkmt) {
-        rr.km = lr.km;
-        rr.kmTimestamp = lr.kmTimestamp;
-      } else if (rkmt > lkmt) {
-        // Remote is newer — already in merged
-      } else {
-        // Same timestamp or both 0 — keep higher value (never lose km)
-        if ((lr.km || 0) > (rr.km || 0)) {
-          rr.km = lr.km;
-          if (lr.kmTimestamp) rr.kmTimestamp = lr.kmTimestamp;
-        }
-      }
-    }
-    // Preserve local child's photo if remote doesn't have it
-    if (localChild.photo && !remoteChild.photo) {
-      remoteChild.photo = localChild.photo;
+      if (lkmt > rkmt) { rr.km = lr.km; rr.kmTimestamp = lr.kmTimestamp; }
+      else if (lkmt === rkmt && (lr.km || 0) > (rr.km || 0)) { rr.km = lr.km; if (lr.kmTimestamp) rr.kmTimestamp = lr.kmTimestamp; }
     }
   });
 
-  // Safety: children in remote but NOT in local — keep them (never lose children)
-  // They're already in merged from the remote base. Just make sure they survive.
-  // (Only deletedChildren filter below can remove them.)
-
-  // Remove ONLY children that are in the admin-authoritative deleted list
+  // Remove only admin-deleted children
   merged.children = merged.children.filter(c => !merged.deletedChildren.includes(c.id));
+
+  // SAFETY: merged must never have fewer non-deleted children than the larger input
+  const localAlive = (local.children || []).filter(c => !merged.deletedChildren.includes(c.id));
+  const remoteAlive = (remote.children || []).filter(c => !merged.deletedChildren.includes(c.id));
+  const expectedMin = Math.max(localAlive.length, remoteAlive.length);
+  if (merged.children.length < expectedMin) {
+    // Something went wrong — add back missing children from the larger set
+    console.warn('MERGE SAFETY: expected ' + expectedMin + ' children but got ' + merged.children.length + '. Recovering...');
+    const mergedIds = new Set(merged.children.map(c => c.id));
+    const source = localAlive.length >= remoteAlive.length ? localAlive : remoteAlive;
+    source.forEach(c => {
+      if (!mergedIds.has(c.id)) merged.children.push(JSON.parse(JSON.stringify(c)));
+    });
+  }
   return merged;
 }
 
