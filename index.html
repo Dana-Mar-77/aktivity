@@ -492,6 +492,19 @@ function migrateData(d) {
     d.children.forEach(function(c) { if (c.pin != null) c.pin = String(c.pin); });
   }
 
+  // Fix stale activityCancelledAt: if activity was signed up AFTER cancellation, remove cancellation
+  if (d.children) {
+    d.children.forEach(function(c) {
+      if (!c.records) return;
+      for (var day in c.records) {
+        var r = c.records[day];
+        if (r.activityCancelledAt && r.activity && r.activity.timestamp > r.activityCancelledAt) {
+          delete r.activityCancelledAt;
+        }
+      }
+    });
+  }
+
   // Ensure zombie children are in deletedChildren and removed from children
   var zombieIds = ['mm38b3xqm93r','mm38i14umg49','mm38od20znkj','mm38okgb63e0','mma9sd153n6a','mmaa6b7kd4m8'];
   if (!d.deletedChildren) d.deletedChildren = [];
