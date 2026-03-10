@@ -1496,6 +1496,7 @@ function addActivity(activityId) {
     }
   }
   rec.activity = { activityId: act.id, name: act.name, points: act.points, icon: act.icon, timestamp: Date.now() };
+  delete rec.activityCancelledAt;
   saveData(data);
   renderActivities();
   toast('+' + act.points + ' ' + bodyCz(act.points) + ' za ' + act.name + '!');
