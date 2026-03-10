@@ -8,12 +8,17 @@
 <meta http-equiv="Expires" content="0">
 <title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
 <script>
-// Force reload if running old code (before sync fix v2)
+// Force reload if running old or cached code
 var KRETIN_CODE_VERSION = 3;
 var lastCodeVer = parseInt(localStorage.getItem('kretin_code_ver') || '0');
-if (lastCodeVer < KRETIN_CODE_VERSION) {
+var reloadAttempts = parseInt(sessionStorage.getItem('kretin_reload') || '0');
+if (lastCodeVer !== KRETIN_CODE_VERSION && lastCodeVer > 0 && reloadAttempts < 2) {
   localStorage.setItem('kretin_code_ver', String(KRETIN_CODE_VERSION));
-  if (lastCodeVer > 0) { location.reload(true); }
+  sessionStorage.setItem('kretin_reload', String(reloadAttempts + 1));
+  location.reload(true);
+} else {
+  localStorage.setItem('kretin_code_ver', String(KRETIN_CODE_VERSION));
+  sessionStorage.setItem('kretin_reload', '0');
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
