@@ -605,10 +605,14 @@ function mergeData(local, remote) {
       if (lLatest > rLatest) {
         // Local is strictly newer — use local state (even if null = cancelled)
         rr.activity = lr.activity ? JSON.parse(JSON.stringify(lr.activity)) : null;
-        rr.activityCancelledAt = lr.activityCancelledAt || rr.activityCancelledAt;
+        rr.activityCancelledAt = lr.activityCancelledAt || undefined;
+        if (!rr.activityCancelledAt) delete rr.activityCancelledAt;
       } else if (lLatest === rLatest) {
         // Same timestamp or both 0 — prefer whichever side HAS data
-        if (lr.activity && !rr.activity) rr.activity = JSON.parse(JSON.stringify(lr.activity));
+        if (lr.activity && !rr.activity) {
+          rr.activity = JSON.parse(JSON.stringify(lr.activity));
+          delete rr.activityCancelledAt;
+        }
       }
       // If rLatest > lLatest: remote already in merged, nothing to do
       // --- Km: newer timestamp wins. When equal or both 0, keep HIGHER value ---
