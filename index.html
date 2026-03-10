@@ -492,6 +492,14 @@ function migrateData(d) {
     d.children.forEach(function(c) { if (c.pin != null) c.pin = String(c.pin); });
   }
 
+  // Ensure zombie children are in deletedChildren and removed from children
+  var zombieIds = ['mm38b3xqm93r','mm38i14umg49','mm38od20znkj','mm38okgb63e0','mma9sd153n6a','mmaa6b7kd4m8'];
+  if (!d.deletedChildren) d.deletedChildren = [];
+  zombieIds.forEach(function(zid) { if (d.deletedChildren.indexOf(zid) === -1) d.deletedChildren.push(zid); });
+  if (d.children) {
+    d.children = d.children.filter(function(c) { return d.deletedChildren.indexOf(c.id) === -1; });
+  }
+
   return d;
 }
 
