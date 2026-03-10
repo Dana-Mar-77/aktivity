@@ -2492,6 +2492,7 @@ function saveAdminRecord(id) {
   if (!child.records) child.records = {};
   if (!child.records[date]) child.records[date] = { activity: null, km: 0 };
   child.records[date].activity = { activityId: act.id, name: act.name, points: act.points, icon: act.icon, timestamp: Date.now() };
+  delete child.records[date].activityCancelledAt;
   saveData(data);
   renderAdminChildren();
   toast('Záznam přidán');
