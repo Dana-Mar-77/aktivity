@@ -9,7 +9,7 @@
 <title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
 <script>
 // Force reload if running old or cached code
-var KRETIN_CODE_VERSION = 3;
+var KRETIN_CODE_VERSION = 4;
 var lastCodeVer = parseInt(localStorage.getItem('kretin_code_ver') || '0');
 var reloadAttempts = parseInt(sessionStorage.getItem('kretin_reload') || '0');
 if (lastCodeVer !== KRETIN_CODE_VERSION && lastCodeVer > 0 && reloadAttempts < 2) {
@@ -665,12 +665,17 @@ async function syncFromSupabase() {
     const { data: row, error } = await sb.from('app_state').select('data').eq('id', 1).single();
     if (error) throw error;
     if (row && row.data && (row.data.children || row.data.settings)) {
-      const remote = migrateData(row.data);
+      const rawRemoteJson = JSON.stringify(row.data);
+      const remote = migrateData(JSON.parse(rawRemoteJson));
       const local = _cache || (() => { try { return migrateData(JSON.parse(localStorage.getItem('kretin_v2'))); } catch { return null; } })();
       // Merge instead of overwrite
       const d = mergeData(local, remote);
       _cache = d;
       localStorage.setItem('kretin_v2', JSON.stringify(d));
+      // Push back if migrateData or merge fixed anything
+      if (JSON.stringify(d) !== rawRemoteJson) {
+        pushToSupabase(JSON.parse(JSON.stringify(d)));
+      }
       return true;
     }
   } catch (e) { console.error('Supabase sync:', e); }
@@ -2925,23 +2930,23 @@ function restoreBackup(idx) {
   sb.channel('app_state_sync')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, async payload => {
       if (payload.new && payload.new.data) {
-        const remote = migrateData(payload.new.data);
+        const rawRemoteJson = JSON.stringify(payload.new.data);
+        const remote = migrateData(JSON.parse(rawRemoteJson));
         if (remote.settings.adminPassword && !isHashed(remote.settings.adminPassword)) {
           remote.settings.adminPassword = await hashPassword(remote.settings.adminPassword);
         }
         // Skip if remote data is identical to local (echo of our own push)
         const local = _cache || loadData();
         const localJson = JSON.stringify(local);
-        const remoteJson = JSON.stringify(remote);
-        if (localJson === remoteJson) return;
+        if (localJson === rawRemoteJson) return;
         // Merge remote data with local — never blindly overwrite
         const merged = mergeData(local, remote);
         const mergedJson = JSON.stringify(merged);
         _cache = merged;
         localStorage.setItem('kretin_v2', JSON.stringify(merged));
-        // If merge result differs from remote, push correction back to Supabase
-        // (e.g. local had newer data that remote was missing)
-        if (mergedJson !== remoteJson) {
+        // If merge result differs from what's in Supabase, push correction back
+        // Compare against RAW remote (not migrated) so migrateData fixes get pushed back
+        if (mergedJson !== rawRemoteJson) {
           pushToSupabase(JSON.parse(mergedJson));
         }
         // Only refresh screen if data actually changed from our perspective
