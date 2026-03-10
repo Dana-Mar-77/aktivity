@@ -773,7 +773,7 @@ function getActivity(data, actId) {
 
 function parseTimeSlotStart(timeSlot) {
   if (!timeSlot) return null;
-  const m = timeSlot.match(/^(\d{1,2}):(\d{2})/);
+  const m = timeSlot.match(/^(\d{1,2})[:.](\d{2})/);
   if (!m) return null;
   return { hours: parseInt(m[1]), minutes: parseInt(m[2]) };
 }
