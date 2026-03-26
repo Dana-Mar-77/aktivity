@@ -1479,13 +1479,14 @@ function renderActivities() {
     const signups = getActivitySignups(data, selDate, slot.activityId);
     const isFull = signups >= slot.maxKids;
     const isThis = dateActivity && dateActivity.activityId === slot.activityId;
+    const isRestricted = slot.allowedSubgroups && slot.allowedSubgroups.length > 0 && !slot.allowedSubgroups.includes(child.subgroup);
     const ptsClass = slot.points <= 10 ? 'pts-10' : slot.points <= 20 ? 'pts-20' : 'pts-30';
     let cls = 'activity-tile ' + ptsClass;
     let onclick = '';
     if (isThis) {
       cls += ' done';
       if (canCancel && !isDatePast) { cls += ' cancellable'; onclick = 'onclick="cancelActivity()"'; }
-    } else if (dateActivity || isFull || isLocked) {
+    } else if (dateActivity || isFull || isLocked || isRestricted) {
       cls += ' locked';
     } else {
       onclick = 'onclick="addActivity(\'' + slot.activityId + '\')"';
@@ -1498,6 +1499,7 @@ function renderActivities() {
     html += '<div class="tile-meta">' + locIcon + ' ' + getLocationName(data, slot.locationId) + ' · ' + esc(eduName) + '</div>';
     html += '<div class="tile-capacity ' + (isFull ? 'full' : '') + '">' + signups + '/' + slot.maxKids + '</div>';
     html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + slot.points + ' ' + bodyCz(slot.points) + '</div>';
+    if (isRestricted) html += '<div style="font-size:.7rem;color:var(--gray);margin-top:2px">Jen pro: ' + slot.allowedSubgroups.join(', ') + '</div>';
     html += '</div>';
   });
   html += '</div>';
@@ -1518,6 +1520,9 @@ function addActivity(activityId) {
   if (sched) {
     const slot = sched.slots.find(s => s.activityId === activityId);
     if (slot) {
+      if (slot.allowedSubgroups && slot.allowedSubgroups.length > 0 && !slot.allowedSubgroups.includes(child.subgroup)) {
+        toast('Tato aktivita je jen pro: ' + slot.allowedSubgroups.join(', ')); return;
+      }
       const signups = getActivitySignups(data, selDate, activityId);
       if (signups >= slot.maxKids) { toast('Aktivita je plná!'); return; }
     }
@@ -1925,6 +1930,12 @@ function renderAdminSchedule() {
         html += '<div class="overview-slot-header"><strong>' + (slot.icon || '🏃') + ' ' + esc(actName) + '</strong>';
         html += '<span class="overview-slot-count' + fullCls + '">' + signups + '/' + slot.maxKids + '</span></div>';
         html += '<div class="overview-slot-edu">👩‍🏫 ' + esc(getEducatorName(data, slot.educatorId)) + '</div>';
+        // Subgroup restriction
+        const asg = slot.allowedSubgroups || [];
+        html += '<div style="margin:6px 0;font-size:.8rem">';
+        if (asg.length > 0) html += '<span style="color:var(--orange);font-weight:600">Jen pro: ' + asg.map(s => esc(s)).join(', ') + '</span> ';
+        html += '<button class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:.75rem" onclick="editSlotSubgroups(\'' + slot.activityId + '\')">Omezit podskupiny</button>';
+        html += '</div>';
         if (children.length > 0) {
           html += '<div class="overview-children">';
           children.forEach(c => {
@@ -2027,6 +2038,48 @@ function saveSchedule() {
   saveData(data);
   toast('Rozvrh uložen');
   renderAdminSchedule();
+}
+
+function editSlotSubgroups(activityId) {
+  const data = loadData();
+  const sched = data.schedule[scheduleDate];
+  if (!sched) return;
+  const slot = sched.slots.find(s => s.activityId === activityId);
+  if (!slot) return;
+  const act = getActivity(data, activityId);
+  const current = slot.allowedSubgroups || [];
+  const modal = document.getElementById('modal-content');
+  let html = '<h2>Omezit podskupiny</h2>';
+  html += '<p style="font-size:.85rem;color:var(--gray);margin-bottom:12px">' + esc(act ? act.name : '?') + ' — ' + formatDateShort(scheduleDate) + '</p>';
+  html += '<p style="font-size:.85rem;margin-bottom:12px">Zaškrtni podskupiny, které se mohou přihlásit. Pokud nic nezaškrtneš, aktivita bude pro všechny.</p>';
+  data.settings.subgroups.forEach(s => {
+    const checked = current.includes(s) ? ' checked' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:8px 0;font-size:.95rem;cursor:pointer"><input type="checkbox" class="slot-sg-check" value="' + esc(s) + '"' + checked + '> ' + esc(s) + '</label>';
+  });
+  html += '<button class="btn btn-green btn-block mt-12" onclick="saveSlotSubgroups(\'' + activityId + '\')">Uložit</button>';
+  html += '<button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  modal.innerHTML = html;
+  openModal();
+}
+
+function saveSlotSubgroups(activityId) {
+  const data = loadData();
+  const sched = data.schedule[scheduleDate];
+  if (!sched) return;
+  const slot = sched.slots.find(s => s.activityId === activityId);
+  if (!slot) return;
+  const checks = document.querySelectorAll('.slot-sg-check');
+  const selected = [];
+  checks.forEach(ch => { if (ch.checked) selected.push(ch.value); });
+  if (selected.length > 0) {
+    slot.allowedSubgroups = selected;
+  } else {
+    delete slot.allowedSubgroups;
+  }
+  saveData(data);
+  closeModal();
+  renderAdminSchedule();
+  toast(selected.length > 0 ? 'Omezení uloženo' : 'Omezení odstraněno');
 }
 
 function clearSchedule() {
