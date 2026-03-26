@@ -1480,13 +1480,14 @@ function renderActivities() {
     const isFull = signups >= slot.maxKids;
     const isThis = dateActivity && dateActivity.activityId === slot.activityId;
     const isRestricted = slot.allowedSubgroups && slot.allowedSubgroups.length > 0 && !slot.allowedSubgroups.includes(child.subgroup);
+    const isTooYoung = act && act.minAge && child.age < act.minAge;
     const ptsClass = slot.points <= 10 ? 'pts-10' : slot.points <= 20 ? 'pts-20' : 'pts-30';
     let cls = 'activity-tile ' + ptsClass;
     let onclick = '';
     if (isThis) {
       cls += ' done';
       if (canCancel && !isDatePast) { cls += ' cancellable'; onclick = 'onclick="cancelActivity()"'; }
-    } else if (dateActivity || isFull || isLocked || isRestricted) {
+    } else if (dateActivity || isFull || isLocked || isRestricted || isTooYoung) {
       cls += ' locked';
     } else {
       onclick = 'onclick="addActivity(\'' + slot.activityId + '\')"';
@@ -1500,6 +1501,7 @@ function renderActivities() {
     html += '<div class="tile-capacity ' + (isFull ? 'full' : '') + '">' + signups + '/' + slot.maxKids + '</div>';
     html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + slot.points + ' ' + bodyCz(slot.points) + '</div>';
     if (isRestricted) html += '<div style="font-size:.7rem;color:var(--gray);margin-top:2px">Jen pro: ' + slot.allowedSubgroups.join(', ') + '</div>';
+    if (isTooYoung) html += '<div style="font-size:.7rem;color:var(--gray);margin-top:2px">Od ' + act.minAge + ' let</div>';
     html += '</div>';
   });
   html += '</div>';
@@ -1514,6 +1516,7 @@ function addActivity(activityId) {
   if (!act) return;
   const selDate = activityDate;
   if (selDate < getToday() || !isBeforeDeadline(data, selDate)) { toast('Přihlašování je uzavřeno!'); return; }
+  if (act.minAge && child.age < act.minAge) { toast('Tato aktivita je od ' + act.minAge + ' let'); return; }
   const rec = getRecord(child, selDate);
   if (rec.activity) { toast('Na tento den už máš zvolenou aktivitu!'); return; }
   const sched = data.schedule[selDate];
@@ -2168,6 +2171,7 @@ function renderAdminActivities() {
       html += '<strong>' + esc(act.name) + '</strong>';
       html += '<div class="tile-meta">' + locIcon + ' ' + getLocationName(data, act.locationId) + ' · max ' + act.maxKids + '</div>';
       html += '<div style="font-size:.75rem;font-weight:800;margin-top:2px">+' + act.points + ' ' + bodyCz(act.points) + '</div>';
+      if (act.minAge) html += '<div style="font-size:.65rem;color:var(--orange);margin-top:2px">Od ' + act.minAge + ' let</div>';
       if (eduCount > 0) html += '<div style="font-size:.65rem;color:var(--gray);margin-top:2px">👩‍🏫 ' + eduCount + '</div>';
       html += '<div style="display:flex;gap:4px;justify-content:center;margin-top:6px"><button class="btn btn-sm btn-blue" style="padding:3px 8px;font-size:.7rem" onclick="event.stopPropagation();editGlobalActivity(\'' + act.id + '\')">✏️</button><button class="btn btn-sm btn-red" style="padding:3px 8px;font-size:.7rem" onclick="event.stopPropagation();deleteGlobalActivity(\'' + act.id + '\')">🗑️</button></div>';
       html += '</div>';
@@ -2182,7 +2186,7 @@ function showAddGlobalActivity() {
   const data = loadData();
   const locOptions = data.locations.map(l => '<option value="' + l.id + '">' + l.icon + ' ' + esc(l.name) + '</option>').join('');
   const modal = document.getElementById('modal-content');
-  modal.innerHTML = '<h2>Přidat aktivitu</h2><div class="form-group"><label>Název</label><input type="text" id="gact-name" placeholder="Název aktivity"></div><div class="form-group"><label>Body</label><select id="gact-points"><option value="10">10 bodů (lehká)</option><option value="20">20 bodů (střední)</option><option value="30">30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="gact-icon" value="🏃" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="gact-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="gact-maxkids" value="8" min="1" max="50"></div><button class="btn btn-green btn-block mt-8" onclick="saveGlobalActivity()">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  modal.innerHTML = '<h2>Přidat aktivitu</h2><div class="form-group"><label>Název</label><input type="text" id="gact-name" placeholder="Název aktivity"></div><div class="form-group"><label>Body</label><select id="gact-points"><option value="10">10 bodů (lehká)</option><option value="20">20 bodů (střední)</option><option value="30">30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="gact-icon" value="🏃" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="gact-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="gact-maxkids" value="8" min="1" max="50"></div><div class="form-group"><label>Min. věk (0 = bez omezení)</label><input type="number" id="gact-minage" value="0" min="0" max="18"></div><button class="btn btn-green btn-block mt-8" onclick="saveGlobalActivity()">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
   openModal();
 }
 
@@ -2192,9 +2196,12 @@ function saveGlobalActivity() {
   const icon = document.getElementById('gact-icon').value.trim() || '🏃';
   const locationId = document.getElementById('gact-location').value;
   const maxKids = parseInt(document.getElementById('gact-maxkids').value) || 8;
+  const minAge = parseInt(document.getElementById('gact-minage').value) || 0;
   if (!name) { toast('Vyplňte název!'); return; }
   const data = loadData();
-  data.activities.push({ id: genId(), name: name, points: points, icon: icon, locationId: locationId, maxKids: maxKids });
+  const newAct = { id: genId(), name: name, points: points, icon: icon, locationId: locationId, maxKids: maxKids };
+  if (minAge > 0) newAct.minAge = minAge;
+  data.activities.push(newAct);
   saveData(data);
   closeModal();
   renderAdminActivities();
@@ -2207,7 +2214,7 @@ function editGlobalActivity(actId) {
   if (!act) return;
   const locOptions = data.locations.map(l => '<option value="' + l.id + '"' + (l.id === act.locationId ? ' selected' : '') + '>' + l.icon + ' ' + esc(l.name) + '</option>').join('');
   const modal = document.getElementById('modal-content');
-  modal.innerHTML = '<h2>Upravit — ' + esc(act.name) + '</h2><div class="form-group"><label>Název</label><input type="text" id="gact-edit-name" value="' + esc(act.name) + '"></div><div class="form-group"><label>Body</label><select id="gact-edit-points"><option value="10"' + (act.points === 10 ? ' selected' : '') + '>10 bodů (lehká)</option><option value="20"' + (act.points === 20 ? ' selected' : '') + '>20 bodů (střední)</option><option value="30"' + (act.points === 30 ? ' selected' : '') + '>30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="gact-edit-icon" value="' + (act.icon || '🏃') + '" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="gact-edit-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="gact-edit-maxkids" value="' + act.maxKids + '" min="1" max="50"></div><button class="btn btn-blue btn-block mt-8" onclick="saveEditGlobalActivity(\'' + actId + '\')">Uložit</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  modal.innerHTML = '<h2>Upravit — ' + esc(act.name) + '</h2><div class="form-group"><label>Název</label><input type="text" id="gact-edit-name" value="' + esc(act.name) + '"></div><div class="form-group"><label>Body</label><select id="gact-edit-points"><option value="10"' + (act.points === 10 ? ' selected' : '') + '>10 bodů (lehká)</option><option value="20"' + (act.points === 20 ? ' selected' : '') + '>20 bodů (střední)</option><option value="30"' + (act.points === 30 ? ' selected' : '') + '>30 bodů (náročná)</option></select></div><div class="form-group"><label>Ikona (emoji)</label><input type="text" id="gact-edit-icon" value="' + (act.icon || '🏃') + '" maxlength="4"></div><div class="form-group"><label>Lokace</label><select id="gact-edit-location">' + locOptions + '</select></div><div class="form-group"><label>Max dětí</label><input type="number" id="gact-edit-maxkids" value="' + act.maxKids + '" min="1" max="50"></div><div class="form-group"><label>Min. věk (0 = bez omezení)</label><input type="number" id="gact-edit-minage" value="' + (act.minAge || 0) + '" min="0" max="18"></div><button class="btn btn-blue btn-block mt-8" onclick="saveEditGlobalActivity(\'' + actId + '\')">Uložit</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
   openModal();
 }
 
@@ -2221,7 +2228,9 @@ function saveEditGlobalActivity(actId) {
   const data = loadData();
   const act = getActivity(data, actId);
   if (!act) return;
+  const minAge = parseInt(document.getElementById('gact-edit-minage').value) || 0;
   act.name = name; act.points = points; act.icon = icon; act.locationId = locationId; act.maxKids = maxKids;
+  if (minAge > 0) act.minAge = minAge; else delete act.minAge;
   saveData(data);
   closeModal();
   renderAdminActivities();
