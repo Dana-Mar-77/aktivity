@@ -9,7 +9,7 @@
 <title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
 <script>
 // Force reload if running old or cached code
-var KRETIN_CODE_VERSION = 4;
+var KRETIN_CODE_VERSION = 5;
 var lastCodeVer = parseInt(localStorage.getItem('kretin_code_ver') || '0');
 var reloadAttempts = parseInt(sessionStorage.getItem('kretin_reload') || '0');
 if (lastCodeVer !== KRETIN_CODE_VERSION && lastCodeVer > 0 && reloadAttempts < 2) {
@@ -220,7 +220,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .day-tile.weekend{background:#FAFAFA}
 .day-tile.selected.weekend{background:var(--blue-light)}
 .day-tile.today-marker::after{content:'';position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--red)}
-@media(max-width:400px){.activity-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}.group-comparison{grid-template-columns:1fr}.app-header h1{font-size:.95rem}.admin-tab{font-size:.7rem;padding:6px 10px}.edu-check-grid{grid-template-columns:1fr}}
+.sea-avatar-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;max-height:240px;overflow-y:auto;padding:4px}
+.sea-avatar-tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border:2px solid #E0E0E0;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;background:var(--white)}
+.sea-avatar-tile:hover{border-color:var(--blue);background:var(--blue-light)}
+.sea-avatar-tile.selected{border-color:var(--blue);background:var(--blue-light);box-shadow:0 0 0 2px var(--blue)}
+.sea-avatar-img{width:60px;height:60px;display:flex;align-items:center;justify-content:center}
+.sea-avatar-img svg{width:100%;height:100%}
+.sea-avatar-name{font-size:.6rem;font-weight:600;color:#555;text-align:center;line-height:1.1}
+@media(max-width:400px){.activity-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}.group-comparison{grid-template-columns:1fr}.app-header h1{font-size:.95rem}.admin-tab{font-size:.7rem;padding:6px 10px}.edu-check-grid{grid-template-columns:1fr}.sea-avatar-grid{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
 <body>
@@ -250,6 +257,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="form-group"><label>Podskupina</label><div class="option-group" id="reg-subgroup"></div></div>
       <div class="form-group"><label>PIN (4 číslice)</label><input type="password" id="reg-pin" placeholder="1234" maxlength="4" inputmode="numeric" pattern="[0-9]*"></div>
       <div class="form-group"><label>Fotka (volitelně)</label><div class="photo-upload"><div class="avatar" id="reg-avatar-preview" onclick="document.getElementById('reg-photo').click()">📷</div><input type="file" id="reg-photo" accept="image/*" onchange="previewPhoto(this)"><span class="upload-hint">Klikni na ikonu</span></div></div>
+      <div class="form-group"><label>Nebo vyber si avatara</label><div id="reg-sea-avatars"></div></div>
       <button class="btn btn-green btn-block mt-8" onclick="registerChild()">Zaregistrovat se</button>
       <button class="btn btn-outline btn-block btn-sm mt-8" onclick="hideRegister()">Zpět</button>
     </div>
@@ -421,6 +429,69 @@ const DEFAULT_DATA = {
     programEnd: "2026-03-31"
   }
 };
+
+// ============ SEA AVATARS ============
+const SEA_AVATARS = {
+  shark: { name: 'Žralok', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="34" rx="24" ry="14" fill="#5C6BC0"/><polygon points="32,8 28,24 36,24" fill="#5C6BC0"/><polygon points="8,34 2,26 12,32" fill="#5C6BC0"/><polygon points="56,34 62,26 52,32" fill="#5C6BC0"/><polygon points="54,38 62,44 54,42" fill="#5C6BC0"/><circle cx="22" cy="31" r="3" fill="white"/><circle cx="22" cy="31" r="1.5" fill="#1A237E"/><ellipse cx="32" cy="42" rx="6" ry="2" fill="#3949AB"/><path d="M26,42 Q32,46 38,42" stroke="white" stroke-width="1.5" fill="none"/></svg>' },
+  orca: { name: 'Kosatka', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="34" rx="24" ry="14" fill="#263238"/><ellipse cx="32" cy="38" rx="20" ry="8" fill="white"/><polygon points="32,10 28,24 36,24" fill="#263238"/><polygon points="54,38 62,44 54,42" fill="#263238"/><circle cx="20" cy="30" r="3" fill="white"/><circle cx="20" cy="30" r="1.5" fill="#263238"/><ellipse cx="40" cy="30" rx="6" ry="4" fill="white" opacity=".4"/></svg>' },
+  ray: { name: 'Rejnok', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="30" rx="26" ry="16" fill="#7E57C2"/><path d="M32,46 Q34,58 30,62" stroke="#7E57C2" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="26" cy="26" r="2.5" fill="white"/><circle cx="26" cy="26" r="1.2" fill="#4A148C"/><circle cx="38" cy="26" r="2.5" fill="white"/><circle cx="38" cy="26" r="1.2" fill="#4A148C"/><ellipse cx="32" cy="34" rx="4" ry="2" fill="#B39DDB"/></svg>' },
+  octopus: { name: 'Chobotnice', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="24" rx="18" ry="16" fill="#E91E63"/><circle cx="26" cy="22" r="4" fill="white"/><circle cx="38" cy="22" r="4" fill="white"/><circle cx="26" cy="22" r="2" fill="#880E4F"/><circle cx="38" cy="22" r="2" fill="#880E4F"/><path d="M28,30 Q32,34 36,30" stroke="#880E4F" stroke-width="1.5" fill="none"/><path d="M14,38 Q10,50 14,54" stroke="#E91E63" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M22,40 Q18,52 22,56" stroke="#E91E63" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M32,42 Q32,54 30,58" stroke="#E91E63" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M42,40 Q46,52 42,56" stroke="#E91E63" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M50,38 Q54,50 50,54" stroke="#E91E63" stroke-width="4" fill="none" stroke-linecap="round"/></svg>' },
+  crocodile: { name: 'Krokodýl', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="34" rx="26" ry="12" fill="#43A047"/><ellipse cx="14" cy="30" rx="10" ry="8" fill="#388E3C"/><ellipse cx="14" cy="36" rx="10" ry="6" fill="#43A047"/><path d="M6,30 L8,28 L10,30 L12,28 L14,30 L16,28 L18,30 L20,28 L22,30" stroke="white" stroke-width="1.5" fill="none"/><circle cx="10" cy="24" r="3" fill="white"/><circle cx="18" cy="24" r="3" fill="white"/><circle cx="10" cy="24" r="1.5" fill="#1B5E20"/><circle cx="18" cy="24" r="1.5" fill="#1B5E20"/><ellipse cx="32" cy="38" rx="20" ry="6" fill="#66BB6A"/></svg>' },
+  starfish: { name: 'Hvězdice', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><polygon points="32,6 37,24 56,24 41,36 46,54 32,44 18,54 23,36 8,24 27,24" fill="#FF7043"/><polygon points="32,12 36,24 50,24 39,33 43,48 32,40 21,48 25,33 14,24 28,24" fill="#FF8A65"/><circle cx="28" cy="28" r="2" fill="#BF360C"/><circle cx="36" cy="28" r="2" fill="#BF360C"/><path d="M30,33 Q32,35 34,33" stroke="#BF360C" stroke-width="1" fill="none"/></svg>' },
+  seahorse: { name: 'Mořský koník', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M32,8 Q42,12 40,24 Q38,36 34,42 Q30,48 28,56 Q26,60 24,58 Q22,56 26,52 Q30,46 32,40 Q26,40 22,36 Q18,32 20,26 Q22,16 32,8Z" fill="#FFB300"/><circle cx="34" cy="18" r="2.5" fill="white"/><circle cx="34" cy="18" r="1.2" fill="#E65100"/><path d="M32,8 Q36,4 40,6" stroke="#FFB300" stroke-width="3" fill="none" stroke-linecap="round"/><ellipse cx="28" cy="32" rx="3" ry="5" fill="#FFC107" opacity=".5"/></svg>' },
+  dolphin: { name: 'Delfín', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="32" rx="24" ry="12" fill="#42A5F5"/><ellipse cx="32" cy="36" rx="18" ry="6" fill="#BBDEFB"/><path d="M10,28 Q4,22 8,18" stroke="#42A5F5" stroke-width="3" fill="none" stroke-linecap="round"/><polygon points="32,12 28,22 36,22" fill="#42A5F5"/><polygon points="54,32 62,38 54,36" fill="#42A5F5"/><circle cx="18" cy="28" r="2.5" fill="white"/><circle cx="18" cy="28" r="1.2" fill="#0D47A1"/><path d="M10,34 Q14,38 20,36" stroke="#1565C0" stroke-width="1" fill="none"/></svg>' },
+  whale: { name: 'Velryba', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="36" rx="26" ry="16" fill="#1565C0"/><ellipse cx="32" cy="40" rx="20" ry="10" fill="#90CAF9"/><circle cx="18" cy="30" r="3" fill="white"/><circle cx="18" cy="30" r="1.5" fill="#0D47A1"/><path d="M32,10 Q28,4 24,8 M32,10 Q36,4 40,8" stroke="#42A5F5" stroke-width="2.5" fill="none" stroke-linecap="round"/><polygon points="56,36 64,30 62,40" fill="#1565C0"/></svg>' },
+  turtle: { name: 'Želva', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="34" rx="20" ry="16" fill="#43A047"/><ellipse cx="32" cy="34" rx="16" ry="12" fill="#66BB6A"/><path d="M20,28 L32,22 L44,28 L44,40 L32,46 L20,40Z" fill="#388E3C" opacity=".4"/><line x1="32" y1="22" x2="32" y2="46" stroke="#2E7D32" stroke-width="1" opacity=".3"/><line x1="20" y1="34" x2="44" y2="34" stroke="#2E7D32" stroke-width="1" opacity=".3"/><circle cx="14" cy="24" r="5" fill="#8D6E63"/><circle cx="11" cy="22" r="2" fill="white"/><circle cx="11" cy="22" r="1" fill="#3E2723"/><circle cx="14" cy="46" r="4" fill="#8D6E63"/><circle cx="50" cy="46" r="4" fill="#8D6E63"/><circle cx="50" cy="24" r="4" fill="#8D6E63"/><path d="M52,34 Q58,34 56,38" stroke="#8D6E63" stroke-width="3" fill="none" stroke-linecap="round"/></svg>' },
+  jellyfish: { name: 'Medúza', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="22" rx="18" ry="14" fill="#CE93D8"/><ellipse cx="32" cy="22" rx="14" ry="10" fill="#E1BEE7" opacity=".5"/><circle cx="26" cy="20" r="2.5" fill="white"/><circle cx="38" cy="20" r="2.5" fill="white"/><circle cx="26" cy="20" r="1.2" fill="#4A148C"/><circle cx="38" cy="20" r="1.2" fill="#4A148C"/><path d="M18,34 Q16,46 18,54" stroke="#CE93D8" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M26,36 Q24,48 26,56" stroke="#CE93D8" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M32,36 Q32,50 30,58" stroke="#CE93D8" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M38,36 Q40,48 38,56" stroke="#CE93D8" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M46,34 Q48,46 46,54" stroke="#CE93D8" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>' },
+  crab: { name: 'Krab', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="36" rx="18" ry="12" fill="#E53935"/><circle cx="22" cy="22" r="5" fill="#E53935"/><circle cx="42" cy="22" r="5" fill="#E53935"/><circle cx="22" cy="20" r="2.5" fill="white"/><circle cx="42" cy="20" r="2.5" fill="white"/><circle cx="22" cy="20" r="1.2" fill="#B71C1C"/><circle cx="42" cy="20" r="1.2" fill="#B71C1C"/><path d="M28,40 Q32,44 36,40" stroke="#B71C1C" stroke-width="1.5" fill="none"/><path d="M8,32 Q4,28 6,24 Q8,22 12,24" stroke="#E53935" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M56,32 Q60,28 58,24 Q56,22 52,24" stroke="#E53935" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="24" cy="50" r="3" fill="#E53935"/><circle cx="32" cy="52" r="3" fill="#E53935"/><circle cx="40" cy="50" r="3" fill="#E53935"/></svg>' },
+  pufferfish: { name: 'Ježek', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="20" fill="#FDD835"/><circle cx="26" cy="28" r="4" fill="white"/><circle cx="38" cy="28" r="4" fill="white"/><circle cx="26" cy="28" r="2" fill="#F57F17"/><circle cx="38" cy="28" r="2" fill="#F57F17"/><ellipse cx="32" cy="38" rx="4" ry="3" fill="#F9A825"/><line x1="32" y1="8" x2="32" y2="12" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="14" x2="20" y2="18" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="46" y1="14" x2="44" y2="18" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="26" x2="14" y2="28" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="54" y1="26" x2="50" y2="28" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="42" x2="16" y2="40" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="52" y1="42" x2="48" y2="40" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="20" y1="52" x2="22" y2="48" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/><line x1="44" y1="52" x2="42" y2="48" stroke="#F9A825" stroke-width="2" stroke-linecap="round"/></svg>' },
+  clownfish: { name: 'Klaun', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="32" rx="24" ry="14" fill="#FF6F00"/><ellipse cx="20" cy="32" rx="6" ry="14" fill="white" opacity=".7"/><ellipse cx="44" cy="32" rx="6" ry="14" fill="white" opacity=".7"/><circle cx="24" cy="28" r="3" fill="white"/><circle cx="40" cy="28" r="3" fill="white"/><circle cx="24" cy="28" r="1.5" fill="#E65100"/><circle cx="40" cy="28" r="1.5" fill="#E65100"/><path d="M28,36 Q32,40 36,36" stroke="#BF360C" stroke-width="1.5" fill="none"/><polygon points="56,32 62,28 62,36" fill="#FF6F00"/></svg>' },
+  seal: { name: 'Tuleň', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="38" rx="22" ry="14" fill="#78909C"/><ellipse cx="32" cy="24" rx="16" ry="14" fill="#90A4AE"/><circle cx="24" cy="22" r="3.5" fill="white"/><circle cx="40" cy="22" r="3.5" fill="white"/><circle cx="24" cy="22" r="1.8" fill="#263238"/><circle cx="40" cy="22" r="1.8" fill="#263238"/><ellipse cx="32" cy="28" rx="4" ry="2.5" fill="#546E7A"/><line x1="18" y1="28" x2="10" y2="26" stroke="#90A4AE" stroke-width="1.5" stroke-linecap="round"/><line x1="18" y1="30" x2="10" y2="30" stroke="#90A4AE" stroke-width="1.5" stroke-linecap="round"/><line x1="46" y1="28" x2="54" y2="26" stroke="#90A4AE" stroke-width="1.5" stroke-linecap="round"/><line x1="46" y1="30" x2="54" y2="30" stroke="#90A4AE" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+  penguin: { name: 'Tučňák', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="36" rx="16" ry="20" fill="#37474F"/><ellipse cx="32" cy="40" rx="10" ry="14" fill="white"/><circle cx="26" cy="26" r="3" fill="white"/><circle cx="38" cy="26" r="3" fill="white"/><circle cx="26" cy="26" r="1.5" fill="#263238"/><circle cx="38" cy="26" r="1.5" fill="#263238"/><polygon points="32,32 29,36 35,36" fill="#FF8F00"/><path d="M16,34 Q8,40 12,48" stroke="#37474F" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M48,34 Q56,40 52,48" stroke="#37474F" stroke-width="4" fill="none" stroke-linecap="round"/><ellipse cx="26" cy="58" rx="5" ry="2" fill="#FF8F00"/><ellipse cx="38" cy="58" rx="5" ry="2" fill="#FF8F00"/></svg>' },
+  squid: { name: 'Krakatice', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="20" rx="14" ry="16" fill="#EC407A"/><polygon points="32,4 28,12 36,12" fill="#EC407A"/><circle cx="26" cy="18" r="3.5" fill="white"/><circle cx="38" cy="18" r="3.5" fill="white"/><circle cx="26" cy="18" r="1.8" fill="#880E4F"/><circle cx="38" cy="18" r="1.8" fill="#880E4F"/><path d="M16,36 Q14,48 16,56" stroke="#EC407A" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M24,38 Q22,50 24,58" stroke="#EC407A" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M32,38 Q32,52 30,60" stroke="#EC407A" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M40,38 Q42,50 40,58" stroke="#EC407A" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M48,36 Q50,48 48,56" stroke="#EC407A" stroke-width="3" fill="none" stroke-linecap="round"/></svg>' },
+  lobster: { name: 'Humr', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="32" rx="14" ry="18" fill="#D32F2F"/><circle cx="26" cy="22" r="3" fill="white"/><circle cx="38" cy="22" r="3" fill="white"/><circle cx="26" cy="22" r="1.5" fill="#B71C1C"/><circle cx="38" cy="22" r="1.5" fill="#B71C1C"/><line x1="26" y1="10" x2="22" y2="4" stroke="#D32F2F" stroke-width="2" stroke-linecap="round"/><line x1="38" y1="10" x2="42" y2="4" stroke="#D32F2F" stroke-width="2" stroke-linecap="round"/><path d="M18,28 Q8,24 6,18 Q4,16 8,16 Q12,16 10,20" stroke="#D32F2F" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M46,28 Q56,24 58,18 Q60,16 56,16 Q52,16 54,20" stroke="#D32F2F" stroke-width="3.5" fill="none" stroke-linecap="round"/><ellipse cx="32" cy="36" rx="6" ry="3" fill="#E57373"/></svg>' },
+  narwhal: { name: 'Narval', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="36" rx="22" ry="12" fill="#7986CB"/><ellipse cx="32" cy="40" rx="16" ry="6" fill="#C5CAE9"/><line x1="14" y1="30" x2="4" y2="10" stroke="#FFD54F" stroke-width="3" stroke-linecap="round"/><circle cx="22" cy="32" r="2.5" fill="white"/><circle cx="22" cy="32" r="1.2" fill="#283593"/><polygon points="52,36 60,42 52,40" fill="#7986CB"/><polygon points="32,18 28,28 36,28" fill="#7986CB"/></svg>' },
+  manatee: { name: 'Kapustňák', svg: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><ellipse cx="32" cy="34" rx="24" ry="16" fill="#8D6E63"/><ellipse cx="32" cy="38" rx="18" ry="10" fill="#A1887F"/><ellipse cx="20" cy="40" rx="8" ry="4" fill="#8D6E63"/><ellipse cx="44" cy="40" rx="8" ry="4" fill="#8D6E63"/><circle cx="24" cy="28" r="3" fill="white"/><circle cx="40" cy="28" r="3" fill="white"/><circle cx="24" cy="28" r="1.5" fill="#3E2723"/><circle cx="40" cy="28" r="1.5" fill="#3E2723"/><ellipse cx="32" cy="36" rx="6" ry="4" fill="#6D4C41"/><circle cx="29" cy="35" r="1.5" fill="#3E2723"/><circle cx="35" cy="35" r="1.5" fill="#3E2723"/></svg>' }
+};
+
+let regSelectedAvatar = null;
+
+function getAvatarHtml(child, size) {
+  if (child.photo) return '<img src="' + child.photo + '" alt="">';
+  if (child.avatar && SEA_AVATARS[child.avatar]) {
+    var s = size || 40;
+    return '<span class="sea-avatar-img" style="width:' + s + 'px;height:' + s + 'px">' + SEA_AVATARS[child.avatar].svg + '</span>';
+  }
+  return child.gender === 'kluk' ? '🧒' : '👧';
+}
+
+function renderSeaAvatarGrid(containerId, selectedKey) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  var html = '<div class="sea-avatar-grid">';
+  for (var key in SEA_AVATARS) {
+    var a = SEA_AVATARS[key];
+    var sel = key === selectedKey ? ' selected' : '';
+    html += '<div class="sea-avatar-tile' + sel + '" onclick="selectSeaAvatar(\'' + containerId + '\',\'' + key + '\')">';
+    html += '<div class="sea-avatar-img">' + a.svg + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function selectSeaAvatar(containerId, key) {
+  regSelectedAvatar = key;
+  // Clear photo if in registration context
+  if (containerId === 'reg-sea-avatars') {
+    regPhotoData = null;
+    var photoInput = document.getElementById('reg-photo');
+    if (photoInput) photoInput.value = '';
+    var preview = document.getElementById('reg-avatar-preview');
+    if (preview) preview.innerHTML = '<span class="sea-avatar-img" style="width:52px;height:52px">' + SEA_AVATARS[key].svg + '</span>';
+  }
+  renderSeaAvatarGrid(containerId, key);
+}
 
 function migrateData(d) {
   if (!d) return JSON.parse(JSON.stringify(DEFAULT_DATA));
@@ -603,9 +674,11 @@ function mergeData(local, remote) {
       remoteChild.group = localChild.group;
       remoteChild.subgroup = localChild.subgroup;
       remoteChild.pin = String(localChild.pin);
+      remoteChild.avatar = localChild.avatar;
       remoteChild._profileUpdatedAt = localProfileTs;
     }
     if (localChild.photo && !remoteChild.photo) remoteChild.photo = localChild.photo;
+    if (localChild.avatar && !remoteChild.avatar) remoteChild.avatar = localChild.avatar;
     // Merge records
     if (!localChild.records) return;
     if (!remoteChild.records) remoteChild.records = {};
@@ -937,7 +1010,9 @@ function showRegister() {
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('admin-login').style.display = 'none';
   document.getElementById('host-login').style.display = 'none';
+  regSelectedAvatar = null;
   renderGroupOptions();
+  renderSeaAvatarGrid('reg-sea-avatars', null);
 }
 function hideRegister() { document.getElementById('register-form').style.display = 'none'; }
 function showLogin() {
@@ -961,7 +1036,9 @@ function previewPhoto(input) {
   const reader = new FileReader();
   reader.onload = function(e) {
     regPhotoData = e.target.result;
+    regSelectedAvatar = null;
     document.getElementById('reg-avatar-preview').innerHTML = '<img src="' + regPhotoData + '" alt="foto">';
+    renderSeaAvatarGrid('reg-sea-avatars', null);
   };
   reader.readAsDataURL(input.files[0]);
 }
@@ -984,14 +1061,16 @@ function registerChild() {
   const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
   if (duplicate) { toast('Dítě s tímto jménem již existuje! Použij Přihlásit se.'); return; }
   const id = genId();
-  data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
+  data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, avatar: regSelectedAvatar || null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   saveData(data);
   regPhotoData = null;
+  regSelectedAvatar = null;
   document.getElementById('reg-name').value = '';
   document.getElementById('reg-age').value = '';
   document.getElementById('reg-pin').value = '';
   document.getElementById('reg-photo').value = '';
   document.getElementById('reg-avatar-preview').innerHTML = '📷';
+  renderSeaAvatarGrid('reg-sea-avatars', null);
   document.querySelectorAll('#register-form .option-btn').forEach(b => b.classList.remove('selected'));
   currentChildId = id;
   saveSession();
@@ -1010,7 +1089,7 @@ function renderLoginList() {
     list.innerHTML = '<li class="empty-state"><div class="empty-icon">🤷</div><p>Zatím nikdo není registrovaný.</p></li>';
     return;
   }
-  list.innerHTML = data.children.map(c => '<li class="child-list-item" onclick="selectLoginChild(\'' + c.id + '\',this)"><div class="avatar">' + (c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧')) + '</div><div class="cl-info">' + esc(c.name) + '<small>' + esc(c.group) + ' · ' + esc(c.subgroup) + ' · ' + c.age + ' let</small></div></li>').join('');
+  list.innerHTML = data.children.map(c => '<li class="child-list-item" onclick="selectLoginChild(\'' + c.id + '\',this)"><div class="avatar">' + getAvatarHtml(c, 40) + '</div><div class="cl-info">' + esc(c.name) + '<small>' + esc(c.group) + ' · ' + esc(c.subgroup) + ' · ' + c.age + ' let</small></div></li>').join('');
 }
 
 function selectLoginChild(id, el) {
@@ -1161,8 +1240,7 @@ function renderHost() {
       if (children.length > 0) {
         html += '<div class="overview-children">';
         children.forEach(c => {
-          const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-          html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+          html += '<div class="overview-child"><div class="avatar">' + getAvatarHtml(c, 28) + '</div><span>' + esc(c.name) + '</span></div>';
         });
         html += '</div>';
       } else {
@@ -1177,8 +1255,7 @@ function renderHost() {
       html += '<div style="margin-top:12px"><h3 style="color:var(--red);margin-bottom:8px">Bez aktivity (' + unsigned.length + ')</h3>';
       html += '<div class="overview-unsigned">';
       unsigned.forEach(c => {
-        const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-        html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+        html += '<div class="overview-child"><div class="avatar">' + getAvatarHtml(c, 28) + '</div><span>' + esc(c.name) + '</span></div>';
       });
       html += '</div></div>';
     }
@@ -1195,7 +1272,7 @@ function renderDashboard() {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
-  document.getElementById('dash-avatar').innerHTML = child.photo ? '<img src="' + child.photo + '" alt="">' : (child.gender === 'kluk' ? '🧒' : '👧');
+  document.getElementById('dash-avatar').innerHTML = getAvatarHtml(child, 80);
   document.getElementById('dash-name').textContent = child.name;
   document.getElementById('dash-group').textContent = child.group + ' · ' + child.subgroup + ' · ' + child.age + ' let';
   document.getElementById('dash-points').textContent = getTotalPoints(child);
@@ -1660,8 +1737,7 @@ function renderLeaderboard() {
     const barH = Math.max(30, Math.round((pts / maxPts) * 150));
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
     const barCls = rank <= 3 ? 'bar-' + rank : 'bar-rest';
-    const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-    return '<div class="lb-bar"><div class="lb-bar-top"><div class="avatar">' + av + '</div><div class="lb-bar-name">' + esc(c.name) + '</div><div class="lb-bar-sub">' + esc(c.subgroup) + '</div></div><div class="lb-bar-col ' + barCls + '" style="height:' + barH + 'px">' + (medal ? '<span class="bar-rank">' + medal + '</span>' : '<span class="bar-rank" style="font-size:.7rem;color:rgba(255,255,255,.8)">' + rank + '.</span>') + '<span class="bar-pts">' + pts + ' b</span></div></div>';
+    return '<div class="lb-bar"><div class="lb-bar-top"><div class="avatar">' + getAvatarHtml(c, 34) + '</div><div class="lb-bar-name">' + esc(c.name) + '</div><div class="lb-bar-sub">' + esc(c.subgroup) + '</div></div><div class="lb-bar-col ' + barCls + '" style="height:' + barH + 'px">' + (medal ? '<span class="bar-rank">' + medal + '</span>' : '<span class="bar-rank" style="font-size:.7rem;color:rgba(255,255,255,.8)">' + rank + '.</span>') + '<span class="bar-pts">' + pts + ' b</span></div></div>';
   }).join('') + '</div>';
 }
 
@@ -1700,8 +1776,7 @@ function renderProfiles() {
   }
   grid.innerHTML = data.children.map(c => {
     const pts = getLockedPoints(c, data);
-    const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-    return '<div class="profile-icon" onclick="showProfileDetail(\'' + c.id + '\')"><div class="avatar">' + av + '</div><div class="profile-name">' + esc(c.name) + '</div><div class="profile-pts">⭐ ' + pts + ' ' + bodyCz(pts) + '</div></div>';
+    return '<div class="profile-icon" onclick="showProfileDetail(\'' + c.id + '\')"><div class="avatar">' + getAvatarHtml(c, 52) + '</div><div class="profile-name">' + esc(c.name) + '</div><div class="profile-pts">⭐ ' + pts + ' ' + bodyCz(pts) + '</div></div>';
   }).join('');
 }
 
@@ -1710,7 +1785,7 @@ function showProfileDetail(id) {
   const child = data.children.find(c => c.id === id);
   if (!child) return;
   const pts = getLockedPoints(child, data);
-  const av = child.photo ? '<img src="' + child.photo + '" alt="">' : (child.gender === 'kluk' ? '🧒' : '👧');
+  const av = getAvatarHtml(child, 64);
   const rankings = getRankings(child, data);
   let totalKm = 0;
   const days = Object.keys(child.records || {}).sort();
@@ -1942,8 +2017,7 @@ function renderAdminSchedule() {
         if (children.length > 0) {
           html += '<div class="overview-children">';
           children.forEach(c => {
-            const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-            html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+            html += '<div class="overview-child"><div class="avatar">' + getAvatarHtml(c, 28) + '</div><span>' + esc(c.name) + '</span></div>';
           });
           html += '</div>';
         } else {
@@ -1957,8 +2031,7 @@ function renderAdminSchedule() {
         html += '<div style="margin-top:12px"><h3 style="color:var(--red);margin-bottom:8px">Bez aktivity (' + unsigned.length + ')</h3>';
         html += '<div class="overview-unsigned">';
         unsigned.forEach(c => {
-          const av = c.photo ? '<img src="' + c.photo + '" alt="">' : (c.gender === 'kluk' ? '🧒' : '👧');
-          html += '<div class="overview-child"><div class="avatar">' + av + '</div><span>' + esc(c.name) + '</span></div>';
+          html += '<div class="overview-child"><div class="avatar">' + getAvatarHtml(c, 28) + '</div><span>' + esc(c.name) + '</span></div>';
         });
         html += '</div></div>';
       }
@@ -2464,8 +2537,10 @@ function adminEditChild(id) {
   const groupOpts = data.settings.groups.map(g => '<option value="' + esc(g) + '" ' + (child.group === g ? 'selected' : '') + '>' + esc(g) + '</option>').join('');
   const subOpts = data.settings.subgroups.map(s => '<option value="' + esc(s) + '" ' + (child.subgroup === s ? 'selected' : '') + '>' + esc(s) + '</option>').join('');
   const modal = document.getElementById('modal-content');
-  modal.innerHTML = '<h2>Upravit — ' + esc(child.name) + '</h2><div class="form-group"><label>Jméno</label><input type="text" id="edit-name" value="' + esc(child.name) + '"></div><div class="form-group"><label>Věk</label><input type="number" id="edit-age" value="' + child.age + '" min="4" max="18"></div><div class="form-group"><label>Pohlaví</label><select id="edit-gender"><option value="kluk" ' + (child.gender === 'kluk' ? 'selected' : '') + '>Kluk</option><option value="holka" ' + (child.gender === 'holka' ? 'selected' : '') + '>Holka</option></select></div><div class="form-group"><label>Skupina</label><select id="edit-group">' + groupOpts + '</select></div><div class="form-group"><label>Podskupina</label><select id="edit-subgroup">' + subOpts + '</select></div><div class="form-group"><label>Nový PIN (prázdné=ponechat)</label><input type="password" id="edit-pin" placeholder="Nový PIN" maxlength="4"></div><button class="btn btn-blue btn-block mt-8" onclick="saveEditChild(\'' + id + '\')">Uložit</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  regSelectedAvatar = child.avatar || null;
+  modal.innerHTML = '<h2>Upravit — ' + esc(child.name) + '</h2><div class="form-group"><label>Jméno</label><input type="text" id="edit-name" value="' + esc(child.name) + '"></div><div class="form-group"><label>Věk</label><input type="number" id="edit-age" value="' + child.age + '" min="4" max="18"></div><div class="form-group"><label>Pohlaví</label><select id="edit-gender"><option value="kluk" ' + (child.gender === 'kluk' ? 'selected' : '') + '>Kluk</option><option value="holka" ' + (child.gender === 'holka' ? 'selected' : '') + '>Holka</option></select></div><div class="form-group"><label>Skupina</label><select id="edit-group">' + groupOpts + '</select></div><div class="form-group"><label>Podskupina</label><select id="edit-subgroup">' + subOpts + '</select></div><div class="form-group"><label>Nový PIN (prázdné=ponechat)</label><input type="password" id="edit-pin" placeholder="Nový PIN" maxlength="4"></div><div class="form-group"><label>Avatar</label><div id="edit-sea-avatars"></div></div><button class="btn btn-blue btn-block mt-8" onclick="saveEditChild(\'' + id + '\')">Uložit</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
   openModal();
+  renderSeaAvatarGrid('edit-sea-avatars', child.avatar || null);
 }
 
 function saveEditChild(id) {
@@ -2479,8 +2554,10 @@ function saveEditChild(id) {
   child.subgroup = document.getElementById('edit-subgroup').value;
   const newPin = document.getElementById('edit-pin').value.trim();
   if (newPin && /^\d{4}$/.test(newPin)) child.pin = newPin;
+  child.avatar = regSelectedAvatar || null;
   child._profileUpdatedAt = Date.now();
   saveData(data);
+  regSelectedAvatar = null;
   closeModal();
   renderAdminChildren();
   toast('Uloženo');
@@ -2513,8 +2590,10 @@ function showAdminAddChild() {
   const groupOpts = data.settings.groups.map(g => '<option value="' + esc(g) + '">' + esc(g) + '</option>').join('');
   const subOpts = data.settings.subgroups.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
   const modal = document.getElementById('modal-content');
-  modal.innerHTML = '<h2>Přidat dítě</h2><div class="form-group"><label>Jméno</label><input type="text" id="add-name" maxlength="30"></div><div class="form-group"><label>Pohlaví</label><select id="add-gender"><option value="kluk">Kluk</option><option value="holka">Holka</option></select></div><div class="form-group"><label>Věk</label><input type="number" id="add-age" min="4" max="18"></div><div class="form-group"><label>Skupina</label><select id="add-group">' + groupOpts + '</select></div><div class="form-group"><label>Podskupina</label><select id="add-subgroup">' + subOpts + '</select></div><div class="form-group"><label>PIN</label><input type="password" id="add-pin" maxlength="4" placeholder="1234"></div><button class="btn btn-green btn-block mt-8" onclick="adminSaveNewChild()">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  regSelectedAvatar = null;
+  modal.innerHTML = '<h2>Přidat dítě</h2><div class="form-group"><label>Jméno</label><input type="text" id="add-name" maxlength="30"></div><div class="form-group"><label>Pohlaví</label><select id="add-gender"><option value="kluk">Kluk</option><option value="holka">Holka</option></select></div><div class="form-group"><label>Věk</label><input type="number" id="add-age" min="4" max="18"></div><div class="form-group"><label>Skupina</label><select id="add-group">' + groupOpts + '</select></div><div class="form-group"><label>Podskupina</label><select id="add-subgroup">' + subOpts + '</select></div><div class="form-group"><label>PIN</label><input type="password" id="add-pin" maxlength="4" placeholder="1234"></div><div class="form-group"><label>Avatar</label><div id="add-sea-avatars"></div></div><button class="btn btn-green btn-block mt-8" onclick="adminSaveNewChild()">Přidat</button><button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
   openModal();
+  renderSeaAvatarGrid('add-sea-avatars', null);
 }
 
 function adminSaveNewChild() {
@@ -2530,8 +2609,9 @@ function adminSaveNewChild() {
   const data = loadData();
   const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
   if (duplicate) { toast('Dítě s tímto jménem již existuje!'); return; }
-  data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
+  data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, avatar: regSelectedAvatar || null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   saveData(data);
+  regSelectedAvatar = null;
   closeModal();
   renderAdminChildren();
   toast('Dítě přidáno');
