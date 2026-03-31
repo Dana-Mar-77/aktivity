@@ -1583,23 +1583,8 @@ function renderActivities() {
     const t = getChildTurnus(child, data);
     const tLabel = t ? t.label : 'Tvůj turnus';
     infoEl.innerHTML = '<div class="warning-box">' + esc(tLabel) + ' skončil.<br><small style="font-weight:400">Můžeš si prohlížet své výsledky na přehledu, ale aktivity na nový turnus nejsou k dispozici.</small></div>' +
-      '<div style="text-align:center;margin-top:20px">' +
-      '<svg viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" style="max-width:220px;margin:0 auto 12px">' +
-      '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#87CEEB"/><stop offset="100%" stop-color="#E0F7FA"/></linearGradient></defs>' +
-      '<rect width="200" height="140" rx="12" fill="url(#sky)"/>' +
-      '<circle cx="160" cy="30" r="18" fill="#FFD54F"/>' +
-      '<ellipse cx="100" cy="120" rx="90" ry="25" fill="#66BB6A"/>' +
-      '<ellipse cx="60" cy="115" rx="30" ry="12" fill="#81C784"/>' +
-      '<circle cx="80" cy="85" r="10" fill="#FFCC80"/><circle cx="80" cy="72" r="7" fill="#FFCC80"/>' +
-      '<rect x="76" y="85" width="8" height="18" rx="3" fill="#42A5F5"/>' +
-      '<line x1="73" y1="90" x2="65" y2="82" stroke="#FFCC80" stroke-width="3" stroke-linecap="round"/>' +
-      '<line x1="87" y1="90" x2="95" y2="82" stroke="#FFCC80" stroke-width="3" stroke-linecap="round"/>' +
-      '<circle cx="77" cy="70" r="1.5" fill="#5D4037"/><circle cx="83" cy="70" r="1.5" fill="#5D4037"/>' +
-      '<path d="M77,74 Q80,77 83,74" stroke="#5D4037" stroke-width="1" fill="none"/>' +
-      '<path d="M120,95 Q130,60 140,95" stroke="#A5D6A7" stroke-width="3" fill="none"/>' +
-      '<circle cx="130" cy="62" r="6" fill="#EF5350" opacity=".8"/>' +
-      '<text x="100" y="135" text-anchor="middle" font-size="7" fill="white" font-weight="bold">Pohyb je radost!</text>' +
-      '</svg>' +
+      '<div style="text-align:center;margin-top:24px;padding:20px;background:linear-gradient(180deg,#E3F2FD 0%,#C8E6C9 100%);border-radius:var(--radius-sm)">' +
+      '<div style="font-size:3rem;letter-spacing:6px;margin-bottom:4px">🌿🏃\u200d♂️☀️🏃\u200d♀️🌿</div>' +
       '<div style="font-size:1rem;font-weight:700;color:var(--green);margin-bottom:6px">K\u0159et\u00ednem nic nekon\u010d\u00ed!</div>' +
       '<div style="font-size:.9rem;color:#555;max-width:320px;margin:0 auto;line-height:1.5">' +
       'Tvoje body a kilometry z\u016fst\u00e1vaj\u00ed nav\u017edy. Ale to nejd\u016fle\u017eit\u011bj\u0161\u00ed si odn\u00e1\u0161\u00ed\u0161 s\u00a0sebou\u00a0\u2014 radost z\u00a0pohybu a\u00a0s\u00edlu, kterou jsi v\u00a0sob\u011b objevil/a. Sportuj d\u00e1l, pro radost, pro zdrav\u00ed, pro sebe. Ka\u017ed\u00fd krok se po\u010d\u00edt\u00e1, i\u00a0bez aplikace!' +
