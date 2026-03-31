@@ -1865,11 +1865,12 @@ function saveKm() {
 // ============ LEADERBOARD ============
 function renderLeaderboardFilters() {
   const data = loadData();
-  // Turnus filter (only if multiple turnuses exist)
+  // Turnus filter (only for admin/host, not for children)
   const turnusList = data.settings.turnusList || [];
   const tBar = document.getElementById('leaderboard-filters');
   let html = '';
-  if (turnusList.length > 1) {
+  const showTurnusFilter = turnusList.length > 1 && (isAdmin || isHost || !currentChildId);
+  if (showTurnusFilter) {
     html += '<div style="margin-bottom:6px">';
     html += '<button class="filter-btn ' + (currentTurnusFilter === 'current' ? 'active' : '') + '" onclick="setTurnusFilter(\'current\')">Aktuální turnus</button>';
     turnusList.forEach(t => {
@@ -1900,6 +1901,11 @@ function setSubFilter(f) { currentSubFilter = f; renderLeaderboard(); }
 function setTurnusFilter(f) { currentTurnusFilter = f; renderLeaderboard(); }
 
 function getFilteredChildrenByTurnus(data) {
+  // Children always see only their own turnus
+  if (currentChildId && !isAdmin) {
+    const me = data.children.find(c => c.id === currentChildId);
+    if (me && me.turnus) return data.children.filter(c => c.turnus === me.turnus);
+  }
   const turnusList = data.settings.turnusList || [];
   if (turnusList.length <= 1) return [...data.children];
   if (currentTurnusFilter === 'all') return [...data.children];
@@ -1973,7 +1979,8 @@ function renderProfiles() {
   detail.style.display = 'none';
   const turnusList = data.settings.turnusList || [];
   let filterHtml = '';
-  if (turnusList.length > 1) {
+  const showTurnusFilter = turnusList.length > 1 && (isAdmin || isHost || !currentChildId);
+  if (showTurnusFilter) {
     filterHtml += '<div style="margin-bottom:10px">';
     filterHtml += '<button class="filter-btn ' + (currentTurnusFilter === 'current' ? 'active' : '') + '" onclick="setTurnusFilter(\'current\');renderProfiles()">Aktuální turnus</button>';
     turnusList.forEach(t => {
