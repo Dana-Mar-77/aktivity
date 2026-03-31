@@ -9,7 +9,7 @@
 <title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
 <script>
 // Force reload if running old or cached code
-var KRETIN_CODE_VERSION = 5;
+var KRETIN_CODE_VERSION = 6;
 var lastCodeVer = parseInt(localStorage.getItem('kretin_code_ver') || '0');
 var reloadAttempts = parseInt(sessionStorage.getItem('kretin_reload') || '0');
 if (lastCodeVer !== KRETIN_CODE_VERSION && lastCodeVer > 0 && reloadAttempts < 2) {
@@ -234,7 +234,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="app-container">
   <div class="app-header">
     <img src="https://kretin.detskelecebny.cz/visual/loga/logo_kretin.svg" alt="Logo" onerror="this.style.display='none'">
-    <div class="title-wrap"><h1>Pohybové aktivity</h1><p>Dětská léčebna Křetín · 3.3. – 31.3.2026</p></div>
+    <div class="title-wrap"><h1>Pohybové aktivity</h1><p id="app-subtitle">Dětská léčebna Křetín</p></div>
   </div>
 
   <!-- AUTH -->
@@ -250,6 +250,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     </div>
     <div id="register-form" class="card" style="display:none">
       <h2>Registrace</h2>
+      <div id="reg-turnus-info" class="form-group"></div>
       <div class="form-group"><label>Jméno / přezdívka</label><input type="text" id="reg-name" placeholder="Tvoje jméno" maxlength="30"></div>
       <div class="form-group"><label>Pohlaví</label><div class="option-group" id="reg-gender"><div class="option-btn" data-val="kluk" onclick="selectOption(this)">Kluk</div><div class="option-btn" data-val="holka" onclick="selectOption(this)">Holka</div></div></div>
       <div class="form-group"><label>Věk</label><input type="number" id="reg-age" placeholder="Kolik ti je?" min="4" max="18"></div>
@@ -425,8 +426,12 @@ const DEFAULT_DATA = {
     cancelBeforeStartMinutes: 30,
     groups: ["Hvězdičky", "Sluníčka"],
     subgroups: ["Žraloci", "Kosatky", "Krokodýli"],
-    programStart: "2026-03-03",
-    programEnd: "2026-03-31"
+    programStart: "2026-04-01",
+    programEnd: "2026-04-28",
+    turnusList: [
+      { id: "2026-03", number: 3, label: "Turnus č. 3", start: "2026-03-03", end: "2026-03-31", status: "archived" },
+      { id: "2026-04", number: 4, label: "Turnus č. 4", start: "2026-04-01", end: "2026-04-28", status: "active" }
+    ]
   }
 };
 
@@ -554,8 +559,23 @@ function migrateData(d) {
 
   if (!d.settings.cancelBeforeStartMinutes) d.settings.cancelBeforeStartMinutes = 30;
   if (d.settings.cancelWindowMinutes) delete d.settings.cancelWindowMinutes;
-  if (!d.settings.programStart) d.settings.programStart = "2026-03-03";
-  if (!d.settings.programEnd) d.settings.programEnd = "2026-03-31";
+  if (!d.settings.programStart) d.settings.programStart = "2026-04-01";
+  if (!d.settings.programEnd) d.settings.programEnd = "2026-04-28";
+
+  // Turnus migration
+  if (!d.settings.turnusList) {
+    d.settings.turnusList = [
+      { id: "2026-03", number: 3, label: "Turnus č. 3", start: "2026-03-03", end: "2026-03-31", status: "archived" },
+      { id: "2026-04", number: 4, label: "Turnus č. 4", start: "2026-04-01", end: "2026-04-28", status: "active" }
+    ];
+    d.settings.programStart = "2026-04-01";
+    d.settings.programEnd = "2026-04-28";
+  }
+  if (d.children) {
+    d.children.forEach(function(c) {
+      if (!c.turnus) c.turnus = "2026-03";
+    });
+  }
 
   // Fix: remove wrongly-deleted children IDs (one-time cleanup on every device)
   if (d.deletedChildren) {
@@ -675,10 +695,12 @@ function mergeData(local, remote) {
       remoteChild.subgroup = localChild.subgroup;
       remoteChild.pin = String(localChild.pin);
       remoteChild.avatar = localChild.avatar;
+      if (localChild.turnus) remoteChild.turnus = localChild.turnus;
       remoteChild._profileUpdatedAt = localProfileTs;
     }
     if (localChild.photo && !remoteChild.photo) remoteChild.photo = localChild.photo;
     if (localChild.avatar && !remoteChild.avatar) remoteChild.avatar = localChild.avatar;
+    if (localChild.turnus && !remoteChild.turnus) remoteChild.turnus = localChild.turnus;
     // Merge records
     if (!localChild.records) return;
     if (!remoteChild.records) remoteChild.records = {};
@@ -885,6 +907,8 @@ let isHost = false;
 let hostDate = getToday();
 let currentFilter = 'all';
 let currentSubFilter = 'all';
+let currentTurnusFilter = 'current';
+let adminTurnusFilter = 'all';
 let selectedLoginId = null;
 let regPhotoData = null;
 let currentAdminTab = 'schedule';
@@ -1013,6 +1037,20 @@ function showRegister() {
   regSelectedAvatar = null;
   renderGroupOptions();
   renderSeaAvatarGrid('reg-sea-avatars', null);
+  renderRegTurnusInfo();
+}
+
+function renderRegTurnusInfo() {
+  const data = loadData();
+  const turnus = getTurnusForToday(data);
+  const el = document.getElementById('reg-turnus-info');
+  if (turnus) {
+    const startF = turnus.start.split('-').reverse().join('.');
+    const endF = turnus.end.split('-').reverse().join('.');
+    el.innerHTML = '<label>Turnus</label><div style="background:#E3F2FD;border:2px solid var(--blue);border-radius:var(--radius-sm);padding:10px 14px;font-weight:700;color:var(--blue);font-size:.95rem">' + esc(turnus.label) + ' (' + startF + ' – ' + endF + ')</div>';
+  } else {
+    el.innerHTML = '<div style="background:#FFF3E0;border:2px solid var(--orange);border-radius:var(--radius-sm);padding:10px 14px;color:#E65100;font-weight:600">Žádný otevřený turnus — registrace není možná.</div>';
+  }
 }
 function hideRegister() { document.getElementById('register-form').style.display = 'none'; }
 function showLogin() {
@@ -1058,10 +1096,12 @@ function registerChild() {
   if (!subgroup) { toast('Vyber podskupinu!'); return; }
   if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) { toast('PIN musí být 4 číslice!'); return; }
   const data = loadData();
+  const regTurnus = getTurnusForToday(data);
+  if (!regTurnus) { toast('Žádný otevřený turnus — registrace není možná.'); return; }
   const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
-  if (duplicate) { toast('Dítě s tímto jménem již existuje! Použij Přihlásit se.'); return; }
+  if (duplicate) { toast('Toto jméno už bylo použito. Zkus třeba ' + name + ' K. nebo jiný tvar.'); return; }
   const id = genId();
-  data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, avatar: regSelectedAvatar || null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
+  data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, avatar: regSelectedAvatar || null, records: {}, turnus: regTurnus.id, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   saveData(data);
   regPhotoData = null;
   regSelectedAvatar = null;
@@ -1089,7 +1129,13 @@ function renderLoginList() {
     list.innerHTML = '<li class="empty-state"><div class="empty-icon">🤷</div><p>Zatím nikdo není registrovaný.</p></li>';
     return;
   }
-  list.innerHTML = data.children.map(c => '<li class="child-list-item" onclick="selectLoginChild(\'' + c.id + '\',this)"><div class="avatar">' + getAvatarHtml(c, 40) + '</div><div class="cl-info">' + esc(c.name) + '<small>' + esc(c.group) + ' · ' + esc(c.subgroup) + ' · ' + c.age + ' let</small></div></li>').join('');
+  list.innerHTML = data.children.map(c => {
+    const active = isChildTurnusActive(c, data);
+    const t = getChildTurnus(c, data);
+    const turnusTag = !active && t ? ' <span style="font-size:.65rem;color:var(--orange);font-weight:400">(' + esc(t.label) + ')</span>' : '';
+    const opStyle = !active ? 'opacity:.55' : '';
+    return '<li class="child-list-item" style="' + opStyle + '" onclick="selectLoginChild(\'' + c.id + '\',this)"><div class="avatar">' + getAvatarHtml(c, 40) + '</div><div class="cl-info">' + esc(c.name) + turnusTag + '<small>' + esc(c.group) + ' · ' + esc(c.subgroup) + ' · ' + c.age + ' let</small></div></li>';
+  }).join('');
 }
 
 function selectLoginChild(id, el) {
@@ -1173,10 +1219,12 @@ function hostSelectDate(date) {
 function renderHost() {
   const data = loadData();
   const container = document.getElementById('host-content');
-  const pStart = data.settings.programStart;
-  const pEnd = data.settings.programEnd;
+  const range = getAllTurnusDateRange(data);
+  const pStart = range.start;
+  const pEnd = range.end;
   const days = getDaysBetween(pStart, pEnd);
   const today = getToday();
+  const turnusList = data.settings.turnusList || [];
 
   if (hostDate < pStart || hostDate > pEnd) hostDate = today >= pStart && today <= pEnd ? today : pStart;
 
@@ -1184,9 +1232,16 @@ function renderHost() {
 
   // Calendar grid
   html += '<div class="card">';
-  html += '<div class="program-info-row">' + days.length + ' dnů &middot; Vybráno: <strong>' + formatDateShort(hostDate) + '</strong></div>';
+  html += '<div class="program-info-row">Vybráno: <strong>' + formatDateShort(hostDate) + '</strong></div>';
+  let lastTurnusId = '';
   html += '<div class="day-selector-grid">';
   days.forEach(d => {
+    // Turnus separator label
+    const dayTurnus = turnusList.find(t => d >= t.start && d <= t.end);
+    if (dayTurnus && dayTurnus.id !== lastTurnusId) {
+      lastTurnusId = dayTurnus.id;
+      html += '<div style="grid-column:1/-1;font-size:.75rem;font-weight:700;color:var(--blue);padding:6px 0 2px">' + esc(dayTurnus.label) + '</div>';
+    }
     const summary = getDaySummary(data, d);
     const dayNum = parseInt(d.split('-')[2], 10);
     const abbr = getDayAbbr(d);
@@ -1249,8 +1304,10 @@ function renderHost() {
       html += '</div>';
     });
 
-    // Children without activity
-    const unsigned = data.children.filter(c => !signedUpIds.has(c.id));
+    // Children without activity (only from turnus covering this date)
+    const dateTurnus = getTurnusForDate(data, hostDate);
+    const relevantChildren = dateTurnus ? data.children.filter(c => c.turnus === dateTurnus.id) : data.children;
+    const unsigned = relevantChildren.filter(c => !signedUpIds.has(c.id));
     if (unsigned.length > 0) {
       html += '<div style="margin-top:12px"><h3 style="color:var(--red);margin-bottom:8px">Bez aktivity (' + unsigned.length + ')</h3>';
       html += '<div class="overview-unsigned">';
@@ -1278,12 +1335,21 @@ function renderDashboard() {
   document.getElementById('dash-points').textContent = getTotalPoints(child);
   const today = getToday();
   document.getElementById('dash-date').textContent = formatDate(today);
-  const active = isProgramActive(data);
+  const childTurnusObj = getChildTurnus(child, data);
+  const turnusActive = isChildTurnusActive(child, data);
+  const active = turnusActive && isChildProgramActive(child, data);
   const warnEl = document.getElementById('dash-program-warning');
-  if (!active) {
-    const msg = today < data.settings.programStart
-      ? 'Program začíná ' + formatDate(data.settings.programStart)
-      : 'Program skončil ' + formatDate(data.settings.programEnd);
+  if (!turnusActive) {
+    const tLabel = childTurnusObj ? childTurnusObj.label : 'Tvůj turnus';
+    warnEl.innerHTML = tLabel + ' skončil. Můžeš si prohlížet své výsledky, ale nemůžeš se přihlašovat na nové aktivity.';
+    warnEl.style.display = 'block';
+    document.getElementById('dash-activity-card').style.display = 'none';
+    document.getElementById('dash-km-card').style.display = 'none';
+  } else if (!active) {
+    const t = childTurnusObj;
+    const msg = t && today < t.start
+      ? 'Program začíná ' + formatDate(t.start)
+      : 'Program skončil ' + formatDate(t ? t.end : data.settings.programEnd);
     warnEl.innerHTML = msg;
     warnEl.style.display = 'block';
     document.getElementById('dash-activity-card').style.display = 'none';
@@ -1338,7 +1404,11 @@ function renderDashboard() {
   renderDashKm(data, child, active);
 
   // --- Přehled turnusu (zmenšené karty) ---
-  const scheduledDates = getScheduledDates(data);
+  let scheduledDates = getScheduledDates(data);
+  // Filter to child's turnus date range
+  if (childTurnusObj) {
+    scheduledDates = scheduledDates.filter(d => d >= childTurnusObj.start && d <= childTurnusObj.end);
+  }
   const preview = document.getElementById('dash-schedule-preview');
   if (scheduledDates.length === 0) {
     preview.innerHTML = '<div class="empty-state"><p>Nejsou naplánovány žádné aktivity.</p></div>';
@@ -1400,6 +1470,7 @@ function removeTodayActivity() {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
   const rec = getTodayRecord(child);
   if (!rec.activity) return;
   if (!isCancellable(rec.activity, data, getToday())) { toast('Čas na změnu vypršel'); return; }
@@ -1470,11 +1541,20 @@ function renderActivities() {
   const infoEl = document.getElementById('activity-info');
   const container = document.getElementById('activity-slots-container');
 
-  if (!isProgramActive(data)) {
+  if (!isChildTurnusActive(child, data)) {
+    const t = getChildTurnus(child, data);
+    const tLabel = t ? t.label : 'Tvůj turnus';
+    infoEl.innerHTML = '<div class="warning-box">' + esc(tLabel) + ' skončil.<br><small style="font-weight:400">Můžeš si prohlížet své výsledky na přehledu, ale aktivity na nový turnus nejsou k dispozici.</small></div>';
+    container.innerHTML = '';
+    return;
+  }
+
+  if (!isChildProgramActive(child, data)) {
+    const t = getChildTurnus(child, data);
     const td = getToday();
-    const msg = td < data.settings.programStart
-      ? 'Program začíná ' + formatDate(data.settings.programStart)
-      : 'Program skončil ' + formatDate(data.settings.programEnd);
+    const msg = t && td < t.start
+      ? 'Program začíná ' + formatDate(t.start)
+      : 'Program skončil ' + formatDate(t ? t.end : data.settings.programEnd);
     infoEl.innerHTML = '<div class="warning-box">' + msg + '<br><small style="font-weight:400">Záznam aktivit je dostupný jen během programu.</small></div>';
     container.innerHTML = '';
     return;
@@ -1589,6 +1669,7 @@ function addActivity(activityId) {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
   const act = getActivity(data, activityId);
   if (!act) return;
   const selDate = activityDate;
@@ -1618,6 +1699,7 @@ function cancelActivity() {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
   const rec = getRecord(child, activityDate);
   if (!rec.activity) return;
   if (!isCancellable(rec.activity, data, activityDate)) { toast('Čas na změnu vypršel'); return; }
@@ -1639,15 +1721,66 @@ function isProgramActive(data) {
   return today >= data.settings.programStart && today <= data.settings.programEnd;
 }
 
+function getChildTurnus(child, data) {
+  if (!child.turnus || !data.settings.turnusList) return null;
+  return data.settings.turnusList.find(t => t.id === child.turnus) || null;
+}
+
+function isChildTurnusActive(child, data) {
+  const t = getChildTurnus(child, data);
+  return t ? t.status === 'active' : false;
+}
+
+function isChildProgramActive(child, data) {
+  const t = getChildTurnus(child, data);
+  if (!t || t.status !== 'active') return false;
+  const today = getToday();
+  return today >= t.start && today <= t.end;
+}
+
+function getTurnusForDate(data, date) {
+  if (!data.settings.turnusList) return null;
+  return data.settings.turnusList.find(t => date >= t.start && date <= t.end) || null;
+}
+
+function getActiveTurnuses(data) {
+  if (!data.settings.turnusList) return [];
+  return data.settings.turnusList.filter(t => t.status === 'active');
+}
+
+function getTurnusForToday(data) {
+  const today = getToday();
+  return data.settings.turnusList ? data.settings.turnusList.find(t => t.status === 'active' && today >= t.start && today <= t.end) : null;
+}
+
+function getAllTurnusDateRange(data) {
+  if (!data.settings.turnusList || data.settings.turnusList.length === 0) {
+    return { start: data.settings.programStart, end: data.settings.programEnd };
+  }
+  const starts = data.settings.turnusList.map(t => t.start);
+  const ends = data.settings.turnusList.map(t => t.end);
+  return { start: starts.sort()[0], end: ends.sort().reverse()[0] };
+}
+
 function renderKm() {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
-  if (!isProgramActive(data)) {
+  if (!isChildTurnusActive(child, data)) {
+    const t = getChildTurnus(child, data);
+    const tLabel = t ? t.label : 'Tvůj turnus';
+    document.getElementById('km-lock-msg').style.display = 'block';
+    document.getElementById('km-lock-msg').innerHTML = esc(tLabel) + ' skončil.<br><small style="font-weight:400">Kilometry můžeš zapisovat jen během svého turnusu.</small>';
+    document.getElementById('km-controls').style.display = 'none';
+    document.getElementById('km-slider').disabled = true;
+    return;
+  }
+  if (!isChildProgramActive(child, data)) {
     const today = getToday();
-    const msg = today < data.settings.programStart
-      ? 'Program začíná ' + formatDate(data.settings.programStart)
-      : 'Program skončil ' + formatDate(data.settings.programEnd);
+    const t = getChildTurnus(child, data);
+    const msg = t && today < t.start
+      ? 'Program začíná ' + formatDate(t.start)
+      : 'Program skončil ' + formatDate(t ? t.end : data.settings.programEnd);
     document.getElementById('km-lock-msg').style.display = 'block';
     document.getElementById('km-lock-msg').innerHTML = msg + '<br><small style="font-weight:400">Záznam kilometrů je dostupný jen během programu.</small>';
     document.getElementById('km-controls').style.display = 'none';
@@ -1681,6 +1814,7 @@ function saveKm() {
   if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
   const rec = getTodayRecord(child);
   const val = parseFloat(document.getElementById('km-slider').value);
   rec.km = val;
@@ -1693,8 +1827,21 @@ function saveKm() {
 // ============ LEADERBOARD ============
 function renderLeaderboardFilters() {
   const data = loadData();
+  // Turnus filter (only if multiple turnuses exist)
+  const turnusList = data.settings.turnusList || [];
+  const tBar = document.getElementById('leaderboard-filters');
+  let html = '';
+  if (turnusList.length > 1) {
+    html += '<div style="margin-bottom:6px">';
+    html += '<button class="filter-btn ' + (currentTurnusFilter === 'current' ? 'active' : '') + '" onclick="setTurnusFilter(\'current\')">Aktuální turnus</button>';
+    turnusList.forEach(t => {
+      html += '<button class="filter-btn ' + (currentTurnusFilter === t.id ? 'active' : '') + '" onclick="setTurnusFilter(\'' + esc(t.id) + '\')">' + esc(t.label) + '</button>';
+    });
+    html += '<button class="filter-btn ' + (currentTurnusFilter === 'all' ? 'active' : '') + '" onclick="setTurnusFilter(\'all\')">Všechny</button>';
+    html += '</div>';
+  }
   const fBar = document.getElementById('leaderboard-filters');
-  let html = '<button class="filter-btn ' + (currentFilter === 'all' ? 'active' : '') + '" onclick="setFilter(\'all\',this)">Všichni</button>';
+  html += '<button class="filter-btn ' + (currentFilter === 'all' ? 'active' : '') + '" onclick="setFilter(\'all\',this)">Všichni</button>';
   html += '<button class="filter-btn ' + (currentFilter === 'kluk' ? 'active' : '') + '" onclick="setFilter(\'kluk\',this)">Kluci</button>';
   html += '<button class="filter-btn ' + (currentFilter === 'holka' ? 'active' : '') + '" onclick="setFilter(\'holka\',this)">Holky</button>';
   data.settings.groups.forEach(g => {
@@ -1712,14 +1859,28 @@ function renderLeaderboardFilters() {
 
 function setFilter(f) { currentFilter = f; renderLeaderboard(); }
 function setSubFilter(f) { currentSubFilter = f; renderLeaderboard(); }
+function setTurnusFilter(f) { currentTurnusFilter = f; renderLeaderboard(); }
+
+function getFilteredChildrenByTurnus(data) {
+  const turnusList = data.settings.turnusList || [];
+  if (turnusList.length <= 1) return [...data.children];
+  if (currentTurnusFilter === 'all') return [...data.children];
+  if (currentTurnusFilter === 'current') {
+    const active = getActiveTurnuses(data);
+    const ids = active.map(t => t.id);
+    return data.children.filter(c => ids.includes(c.turnus));
+  }
+  return data.children.filter(c => c.turnus === currentTurnusFilter);
+}
 
 function renderLeaderboard() {
   const data = loadData();
   renderLeaderboardFilters();
-  renderGroupCompare(data);
-  renderSubgroupCompare(data);
 
-  let children = [...data.children];
+  let children = getFilteredChildrenByTurnus(data);
+  renderGroupCompare(data, children);
+  renderSubgroupCompare(data, children);
+
   if (currentFilter === 'kluk' || currentFilter === 'holka') children = children.filter(c => c.gender === currentFilter);
   else if (currentFilter !== 'all') children = children.filter(c => c.group === currentFilter);
   if (currentSubFilter !== 'all') children = children.filter(c => c.subgroup === currentSubFilter);
@@ -1741,23 +1902,25 @@ function renderLeaderboard() {
   }).join('') + '</div>';
 }
 
-function renderGroupCompare(data) {
+function renderGroupCompare(data, filteredChildren) {
   const container = document.getElementById('group-compare');
   const colors = ['#FFF8E1', '#FFFDE7', '#E8F5E9', '#F3E5F5'];
+  const pool = filteredChildren || data.children;
   container.innerHTML = data.settings.groups.map((g, i) => {
-    const members = data.children.filter(c => c.group === g);
+    const members = pool.filter(c => c.group === g);
     const total = members.reduce((s, c) => s + getLockedPoints(c, data), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
     return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(g) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
   }).join('');
 }
 
-function renderSubgroupCompare(data) {
+function renderSubgroupCompare(data, filteredChildren) {
   const container = document.getElementById('subgroup-compare');
   const colors = ['#E3F2FD', '#E8F5E9', '#FFF3E0', '#F3E5F5'];
+  const pool = filteredChildren || data.children;
   container.style.gridTemplateColumns = 'repeat(' + Math.min(data.settings.subgroups.length, 3) + ',1fr)';
   container.innerHTML = data.settings.subgroups.map((s, i) => {
-    const members = data.children.filter(c => c.subgroup === s);
+    const members = pool.filter(c => c.subgroup === s);
     const total = members.reduce((sum, c) => sum + getLockedPoints(c, data), 0);
     const avg = members.length > 0 ? (total / members.length).toFixed(1) : 0;
     return '<div class="group-card" style="background:' + (colors[i % colors.length]) + '"><div class="group-name">' + esc(s) + '</div><div class="group-pts">' + total + ' b</div><div class="group-avg">' + members.length + ' dětí · Ø ' + avg + ' b</div></div>';
@@ -1770,11 +1933,23 @@ function renderProfiles() {
   const grid = document.getElementById('profiles-grid');
   const detail = document.getElementById('profile-detail');
   detail.style.display = 'none';
-  if (data.children.length === 0) {
-    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><p>Zatím žádné děti.</p></div>';
+  const turnusList = data.settings.turnusList || [];
+  let filterHtml = '';
+  if (turnusList.length > 1) {
+    filterHtml += '<div style="margin-bottom:10px">';
+    filterHtml += '<button class="filter-btn ' + (currentTurnusFilter === 'current' ? 'active' : '') + '" onclick="setTurnusFilter(\'current\');renderProfiles()">Aktuální turnus</button>';
+    turnusList.forEach(t => {
+      filterHtml += '<button class="filter-btn ' + (currentTurnusFilter === t.id ? 'active' : '') + '" onclick="setTurnusFilter(\'' + esc(t.id) + '\');renderProfiles()">' + esc(t.label) + '</button>';
+    });
+    filterHtml += '<button class="filter-btn ' + (currentTurnusFilter === 'all' ? 'active' : '') + '" onclick="setTurnusFilter(\'all\');renderProfiles()">Všechny</button>';
+    filterHtml += '</div>';
+  }
+  const children = getFilteredChildrenByTurnus(data);
+  if (children.length === 0) {
+    grid.innerHTML = filterHtml + '<div class="empty-state"><div class="empty-icon">👥</div><p>Zatím žádné děti.</p></div>';
     return;
   }
-  grid.innerHTML = data.children.map(c => {
+  grid.innerHTML = filterHtml + children.map(c => {
     const pts = getLockedPoints(c, data);
     return '<div class="profile-icon" onclick="showProfileDetail(\'' + c.id + '\')"><div class="avatar">' + getAvatarHtml(c, 52) + '</div><div class="profile-name">' + esc(c.name) + '</div><div class="profile-pts">⭐ ' + pts + ' ' + bodyCz(pts) + '</div></div>';
   }).join('');
@@ -2444,10 +2619,32 @@ function renderAdminChildren() {
   const container = document.getElementById('admin-tab-children');
   let children = [...data.children];
 
+  // Turnus filter
+  const turnusList = data.settings.turnusList || [];
+  if (adminTurnusFilter !== 'all') {
+    if (adminTurnusFilter === 'current') {
+      const active = getActiveTurnuses(data);
+      const ids = active.map(t => t.id);
+      children = children.filter(c => ids.includes(c.turnus));
+    } else {
+      children = children.filter(c => c.turnus === adminTurnusFilter);
+    }
+  }
   if (adminChildFilter !== 'all') children = children.filter(c => c.group === adminChildFilter);
   if (adminSubFilter !== 'all') children = children.filter(c => c.subgroup === adminSubFilter);
 
   let html = '<div class="card"><div class="flex-between mb-8"><h2 style="margin-bottom:0">Děti (' + data.children.length + ')</h2><button class="btn btn-sm btn-green" onclick="showAdminAddChild()">+ Přidat</button></div>';
+
+  // Turnus filter bar
+  if (turnusList.length > 1) {
+    html += '<div class="filter-bar">';
+    html += '<button class="filter-btn ' + (adminTurnusFilter === 'all' ? 'active' : '') + '" onclick="adminTurnusFilter=\'all\';renderAdminChildren()">Všechny turnusy</button>';
+    html += '<button class="filter-btn ' + (adminTurnusFilter === 'current' ? 'active' : '') + '" onclick="adminTurnusFilter=\'current\';renderAdminChildren()">Aktuální</button>';
+    turnusList.forEach(t => {
+      html += '<button class="filter-btn ' + (adminTurnusFilter === t.id ? 'active' : '') + '" onclick="adminTurnusFilter=\'' + esc(t.id) + '\';renderAdminChildren()">' + esc(t.label) + '</button>';
+    });
+    html += '</div>';
+  }
 
   // Filters
   html += '<div class="filter-bar">';
@@ -2608,8 +2805,10 @@ function adminSaveNewChild() {
   if (!pin || !/^\d{4}$/.test(pin)) { toast('PIN musí být 4 číslice!'); return; }
   const data = loadData();
   const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
-  if (duplicate) { toast('Dítě s tímto jménem již existuje!'); return; }
-  data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, avatar: regSelectedAvatar || null, records: {}, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
+  if (duplicate) { toast('Toto jméno už bylo použito!'); return; }
+  const adminTurnus = getTurnusForToday(data);
+  const turnusId = adminTurnus ? adminTurnus.id : (getActiveTurnuses(data)[0] || {}).id || '';
+  data.children.push({ id: genId(), name, gender, age, group, subgroup, pin, photo: null, avatar: regSelectedAvatar || null, records: {}, turnus: turnusId, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   saveData(data);
   regSelectedAvatar = null;
   closeModal();
@@ -2775,11 +2974,93 @@ function exportData() {
 }
 
 // ---- SETTINGS TAB ----
+function toggleTurnusStatus(index) {
+  const data = loadData();
+  const t = data.settings.turnusList[index];
+  if (!t) return;
+  t.status = t.status === 'active' ? 'archived' : 'active';
+  // Update programStart/End to match active turnuses
+  const active = data.settings.turnusList.filter(x => x.status === 'active');
+  if (active.length > 0) {
+    data.settings.programStart = active.map(x => x.start).sort()[0];
+    data.settings.programEnd = active.map(x => x.end).sort().reverse()[0];
+  }
+  saveData(data);
+  renderAdminSettings();
+  toast(t.label + ' — ' + (t.status === 'active' ? 'aktivován' : 'archivován'));
+}
+
+function showAddTurnusDialog() {
+  const data = loadData();
+  const turnusList = data.settings.turnusList || [];
+  const nextNum = turnusList.length > 0 ? Math.max(...turnusList.map(t => t.number || 0)) + 1 : 1;
+  const modal = document.getElementById('modal-content');
+  modal.innerHTML = '<h2>Nový turnus</h2>' +
+    '<div class="form-group"><label>Číslo turnusu</label><input type="number" id="turnus-num" value="' + nextNum + '" min="1"></div>' +
+    '<div class="form-group"><label>Začátek</label><input type="date" id="turnus-start"></div>' +
+    '<div class="form-group"><label>Konec</label><input type="date" id="turnus-end"></div>' +
+    '<button class="btn btn-green btn-block mt-8" onclick="saveNewTurnus()">Přidat turnus</button>' +
+    '<button class="btn btn-outline btn-block btn-sm mt-8" onclick="closeModal()">Zrušit</button>';
+  openModal();
+}
+
+function saveNewTurnus() {
+  const num = parseInt(document.getElementById('turnus-num').value);
+  const start = document.getElementById('turnus-start').value;
+  const end = document.getElementById('turnus-end').value;
+  if (!num || !start || !end) { toast('Vyplňte všechna pole!'); return; }
+  if (start > end) { toast('Začátek musí být před koncem!'); return; }
+  const data = loadData();
+  if (!data.settings.turnusList) data.settings.turnusList = [];
+  const id = start.slice(0, 7); // e.g. "2026-05"
+  if (data.settings.turnusList.find(t => t.id === id)) { toast('Turnus s tímto ID už existuje!'); return; }
+  data.settings.turnusList.push({
+    id: id,
+    number: num,
+    label: 'Turnus č. ' + num,
+    start: start,
+    end: end,
+    status: 'active'
+  });
+  // Update programStart/End
+  const active = data.settings.turnusList.filter(x => x.status === 'active');
+  if (active.length > 0) {
+    data.settings.programStart = active.map(x => x.start).sort()[0];
+    data.settings.programEnd = active.map(x => x.end).sort().reverse()[0];
+  }
+  saveData(data);
+  closeModal();
+  renderAdminSettings();
+  toast('Turnus č. ' + num + ' přidán');
+}
+
 function renderAdminSettings() {
   const data = loadData();
   const container = document.getElementById('admin-tab-settings');
 
   let html = '<div class="card"><h2>Nastavení</h2>';
+
+  // Turnusy
+  html += '<h3 class="mb-8">Správa turnusů</h3>';
+  const turnusList = data.settings.turnusList || [];
+  if (turnusList.length > 0) {
+    turnusList.forEach((t, i) => {
+      const startF = t.start.split('-').reverse().join('.');
+      const endF = t.end.split('-').reverse().join('.');
+      const statusCls = t.status === 'active' ? 'color:var(--green);font-weight:700' : 'color:var(--gray)';
+      const statusLabel = t.status === 'active' ? 'aktivní' : 'archiv';
+      const toggleLabel = t.status === 'active' ? 'Archivovat' : 'Aktivovat';
+      const toggleCls = t.status === 'active' ? 'btn-orange' : 'btn-green';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0">';
+      html += '<div><strong>' + esc(t.label) + '</strong> <span style="font-size:.8rem;color:var(--gray)">' + startF + ' – ' + endF + '</span> <span style="font-size:.75rem;' + statusCls + '">(' + statusLabel + ')</span></div>';
+      html += '<button class="btn btn-sm ' + toggleCls + '" style="padding:2px 8px;font-size:.7rem" onclick="toggleTurnusStatus(' + i + ')">' + toggleLabel + '</button>';
+      html += '</div>';
+    });
+  } else {
+    html += '<div style="font-size:.85rem;color:var(--gray)">Žádné turnusy.</div>';
+  }
+  html += '<button class="btn btn-sm btn-blue mt-8" onclick="showAddTurnusDialog()">+ Přidat turnus</button>';
+  html += '<div class="divider"></div>';
 
   // Locations
   html += '<h3 class="mb-8">Lokace</h3>';
@@ -3103,6 +3384,26 @@ function restoreBackup(idx) {
   restoreSession();
 
   _initDone = true;
+
+  // Update subtitle with active turnus info
+  (function updateSubtitle() {
+    var d = loadData();
+    var t = getTurnusForToday(d);
+    // If no turnus covers today, show the next upcoming active turnus
+    if (!t) {
+      var today = getToday();
+      var upcoming = (d.settings.turnusList || []).filter(function(x) { return x.status === 'active' && x.start > today; }).sort(function(a, b) { return a.start < b.start ? -1 : 1; });
+      if (upcoming.length > 0) t = upcoming[0];
+    }
+    var sub = document.getElementById('app-subtitle');
+    if (sub && t) {
+      var sf = t.start.split('-').reverse().join('.');
+      var ef = t.end.split('-').reverse().join('.');
+      sub.textContent = 'Dětská léčebna Křetín · ' + t.label + ' (' + sf + ' – ' + ef + ')';
+    } else if (sub) {
+      sub.textContent = 'Dětská léčebna Křetín';
+    }
+  })();
 
   // Click outside modal to close
   document.getElementById('modal-overlay').addEventListener('click', function(e) {
