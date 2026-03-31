@@ -1245,29 +1245,58 @@ function renderHost() {
     const tileScale = isArchived ? 'transform:scale(0.82);margin:-2px' : '';
 
     html += '<div style="' + labelStyle + '">' + esc(turnus.label) + ' (' + startF + ' – ' + endF + ')' + (isArchived ? ' <span style="font-size:.6rem;color:var(--orange)">(ukončený)</span>' : '') + '</div>';
-    html += '<div class="day-selector-grid">';
-    days.forEach(d => {
-      const summary = getDaySummary(data, d);
-      const dayNum = parseInt(d.split('-')[2], 10);
-      const abbr = getDayAbbr(d);
-      const dow = new Date(d + 'T00:00:00').getDay();
-      const isWeekend = dow === 0 || dow === 6;
-      const isSelected = d === hostDate;
-      const isToday = d === today;
-      let cls = 'day-tile';
-      if (isSelected) cls += ' selected';
-      if (summary.hasSchedule) cls += ' has-schedule';
-      if (isWeekend) cls += ' weekend';
-      if (isToday) cls += ' today-marker';
-      html += '<div class="' + cls + '" style="' + tileScale + (isArchived ? ';opacity:.75' : '') + '" onclick="hostSelectDate(\'' + d + '\')">';
-      html += '<span class="day-num">' + dayNum + '</span>';
-      html += '<span class="day-abbr">' + abbr + '</span>';
-      if (summary.activityCount > 0) {
-        html += '<span class="day-act-count">' + summary.activityCount + ' akt.</span>';
-      }
+
+    if (isArchived) {
+      // Archived: 7-column grid (Po-Ne), smaller tiles, empty slots for missing days
+      html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">';
+      // Header row
+      ['Po','Út','St','Čt','Pá','So','Ne'].forEach(h => {
+        html += '<div style="text-align:center;font-size:.55rem;font-weight:600;color:var(--gray)">' + h + '</div>';
+      });
+      // Offset for first day: getDay() returns 0=Sun, convert to Mon=0
+      const firstDow = (new Date(days[0] + 'T00:00:00').getDay() + 6) % 7; // 0=Mon
+      for (let i = 0; i < firstDow; i++) html += '<div></div>';
+      days.forEach(d => {
+        const summary = getDaySummary(data, d);
+        const dayNum = parseInt(d.split('-')[2], 10);
+        const isSelected = d === hostDate;
+        const isToday = d === today;
+        const hasSched = summary.hasSchedule;
+        const bg = isSelected ? 'var(--blue)' : hasSched ? '#E8F5E9' : '#f5f5f5';
+        const color = isSelected ? '#fff' : hasSched ? '#2E7D32' : '#999';
+        const border = isToday ? '2px solid var(--red)' : '1px solid ' + (isSelected ? 'var(--blue)' : '#e0e0e0');
+        html += '<div onclick="hostSelectDate(\'' + d + '\')" style="text-align:center;padding:3px 0;border-radius:4px;background:' + bg + ';color:' + color + ';border:' + border + ';cursor:pointer;font-size:.65rem;line-height:1.2;opacity:.8">';
+        html += '<div style="font-weight:700">' + dayNum + '</div>';
+        if (summary.activityCount > 0) html += '<div style="font-size:.5rem">' + summary.activityCount + ' akt.</div>';
+        html += '</div>';
+      });
       html += '</div>';
-    });
-    html += '</div>';
+    } else {
+      // Active turnus: normal day-selector-grid
+      html += '<div class="day-selector-grid">';
+      days.forEach(d => {
+        const summary = getDaySummary(data, d);
+        const dayNum = parseInt(d.split('-')[2], 10);
+        const abbr = getDayAbbr(d);
+        const dow = new Date(d + 'T00:00:00').getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const isSelected = d === hostDate;
+        const isToday = d === today;
+        let cls = 'day-tile';
+        if (isSelected) cls += ' selected';
+        if (summary.hasSchedule) cls += ' has-schedule';
+        if (isWeekend) cls += ' weekend';
+        if (isToday) cls += ' today-marker';
+        html += '<div class="' + cls + '" onclick="hostSelectDate(\'' + d + '\')">';
+        html += '<span class="day-num">' + dayNum + '</span>';
+        html += '<span class="day-abbr">' + abbr + '</span>';
+        if (summary.activityCount > 0) {
+          html += '<span class="day-act-count">' + summary.activityCount + ' akt.</span>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
   });
 
   html += '</div>';
