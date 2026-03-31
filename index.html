@@ -1129,13 +1129,26 @@ function renderLoginList() {
     list.innerHTML = '<li class="empty-state"><div class="empty-icon">🤷</div><p>Zatím nikdo není registrovaný.</p></li>';
     return;
   }
-  list.innerHTML = data.children.map(c => {
+  // Sort: active turnus children first, then archived
+  const sorted = [...data.children].sort((a, b) => {
+    const aActive = isChildTurnusActive(a, data) ? 0 : 1;
+    const bActive = isChildTurnusActive(b, data) ? 0 : 1;
+    return aActive - bActive;
+  });
+  let loginHtml = '';
+  let shownArchivedHeader = false;
+  sorted.forEach(c => {
     const active = isChildTurnusActive(c, data);
     const t = getChildTurnus(c, data);
+    if (!active && !shownArchivedHeader) {
+      shownArchivedHeader = true;
+      loginHtml += '<li style="list-style:none;padding:10px 0 4px;font-size:.7rem;font-weight:600;color:var(--gray);border-top:1px solid #e0e0e0;margin-top:6px">Předchozí turnusy</li>';
+    }
     const turnusTag = !active && t ? ' <span style="font-size:.65rem;color:var(--orange);font-weight:400">(' + esc(t.label) + ')</span>' : '';
     const opStyle = !active ? 'opacity:.55' : '';
-    return '<li class="child-list-item" style="' + opStyle + '" onclick="selectLoginChild(\'' + c.id + '\',this)"><div class="avatar">' + getAvatarHtml(c, 40) + '</div><div class="cl-info">' + esc(c.name) + turnusTag + '<small>' + esc(c.group) + ' · ' + esc(c.subgroup) + ' · ' + c.age + ' let</small></div></li>';
-  }).join('');
+    loginHtml += '<li class="child-list-item" style="' + opStyle + '" onclick="selectLoginChild(\'' + c.id + '\',this)"><div class="avatar">' + getAvatarHtml(c, 40) + '</div><div class="cl-info">' + esc(c.name) + turnusTag + '<small>' + esc(c.group) + ' · ' + esc(c.subgroup) + ' · ' + c.age + ' let</small></div></li>';
+  });
+  list.innerHTML = loginHtml;
 }
 
 function selectLoginChild(id, el) {
