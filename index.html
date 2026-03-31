@@ -1379,7 +1379,7 @@ function renderDashboard() {
   const warnEl = document.getElementById('dash-program-warning');
   if (!turnusActive) {
     const tLabel = childTurnusObj ? childTurnusObj.label : 'Tvůj turnus';
-    warnEl.innerHTML = tLabel + ' skončil. Můžeš si prohlížet své výsledky, ale nemůžeš se přihlašovat na nové aktivity.';
+    warnEl.innerHTML = tLabel + ' je uzav\u0159en. Můžeš si prohlížet své výsledky, ale nemůžeš se přihlašovat na nové aktivity.';
     warnEl.style.display = 'block';
     document.getElementById('dash-activity-card').style.display = 'none';
     document.getElementById('dash-km-card').style.display = 'none';
@@ -1508,7 +1508,7 @@ function removeTodayActivity() {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
-  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus je uzav\u0159en.'); return; }
   const rec = getTodayRecord(child);
   if (!rec.activity) return;
   if (!isCancellable(rec.activity, data, getToday())) { toast('Čas na změnu vypršel'); return; }
@@ -1582,12 +1582,12 @@ function renderActivities() {
   if (!isChildTurnusActive(child, data)) {
     const t = getChildTurnus(child, data);
     const tLabel = t ? t.label : 'Tvůj turnus';
-    infoEl.innerHTML = '<div class="warning-box">' + esc(tLabel) + ' skončil.<br><small style="font-weight:400">Můžeš si prohlížet své výsledky na přehledu, ale aktivity na nový turnus nejsou k dispozici.</small></div>' +
+    infoEl.innerHTML = '<div class="warning-box">' + esc(tLabel) + ' je uzav\u0159en.<br><small style="font-weight:400">Můžeš si prohlížet své výsledky na přehledu, ale aktivity na nový turnus nejsou k dispozici.</small></div>' +
       '<div style="text-align:center;margin-top:24px;padding:20px;background:linear-gradient(180deg,#E3F2FD 0%,#C8E6C9 100%);border-radius:var(--radius-sm)">' +
       '<div style="font-size:3rem;letter-spacing:6px;margin-bottom:4px">🌿🏃\u200d♂️☀️🏃\u200d♀️🌿</div>' +
-      '<div style="font-size:1rem;font-weight:700;color:var(--green);margin-bottom:6px">K\u0159et\u00ednem nic nekon\u010d\u00ed!</div>' +
+      '<div style="font-size:1rem;font-weight:700;color:var(--green);margin-bottom:6px">K\u0159et\u00ednem to nekon\u010d\u00ed!</div>' +
       '<div style="font-size:.9rem;color:#555;max-width:320px;margin:0 auto;line-height:1.5">' +
-      'Tvoje body a kilometry z\u016fst\u00e1vaj\u00ed nav\u017edy. Ale to nejd\u016fle\u017eit\u011bj\u0161\u00ed si odn\u00e1\u0161\u00ed\u0161 s\u00a0sebou\u00a0\u2014 radost z\u00a0pohybu a\u00a0s\u00edlu, kterou jsi v\u00a0sob\u011b objevil/a. Sportuj d\u00e1l, pro radost, pro zdrav\u00ed, pro sebe. Ka\u017ed\u00fd krok se po\u010d\u00edt\u00e1, i\u00a0bez aplikace!' +
+      'Tvoje body a kilometry z\u016fst\u00e1vaj\u00ed nav\u017edy. Ale to nejd\u016fle\u017eit\u011bj\u0161\u00ed si odn\u00e1\u0161\u00ed\u0161 s\u00a0sebou\u00a0\u2014 radost z\u00a0pohybu a\u00a0s\u00edlu, kterou jsi v\u00a0sob\u011b objevil/a. Sportuj d\u00e1l, pro radost, pro zdrav\u00ed, pro sebe!' +
       '</div>' +
       '<div style="font-size:1.5rem;margin-top:10px">💪🌟🏃</div>' +
       '</div>';
@@ -1715,7 +1715,7 @@ function addActivity(activityId) {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
-  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus je uzav\u0159en.'); return; }
   const act = getActivity(data, activityId);
   if (!act) return;
   const selDate = activityDate;
@@ -1745,7 +1745,7 @@ function cancelActivity() {
   const data = loadData();
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
-  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus je uzav\u0159en.'); return; }
   const rec = getRecord(child, activityDate);
   if (!rec.activity) return;
   if (!isCancellable(rec.activity, data, activityDate)) { toast('Čas na změnu vypršel'); return; }
@@ -1816,7 +1816,9 @@ function renderKm() {
     const t = getChildTurnus(child, data);
     const tLabel = t ? t.label : 'Tvůj turnus';
     document.getElementById('km-lock-msg').style.display = 'block';
-    document.getElementById('km-lock-msg').innerHTML = esc(tLabel) + ' skončil.<br><small style="font-weight:400">Kilometry můžeš zapisovat jen během svého turnusu.</small>';
+    document.getElementById('km-lock-msg').innerHTML = esc(tLabel) + ' je uzav\u0159en.<br><small style="font-weight:400">Kilometry m\u016f\u017ee\u0161 zapisovat jen b\u011bhem sv\u00e9ho turnusu.</small>' +
+      '<div style="margin-top:14px;padding:12px;background:linear-gradient(180deg,#E3F2FD 0%,#C8E6C9 100%);border-radius:8px;text-align:center">' +
+      '<div style="font-size:.95rem;color:#555;line-height:1.5">Ka\u017ed\u00fd krok se po\u010d\u00edt\u00e1, i\u00a0bez aplikace! \ud83d\udcaa</div></div>';
     document.getElementById('km-controls').style.display = 'none';
     document.getElementById('km-slider').disabled = true;
     return;
@@ -1860,7 +1862,7 @@ function saveKm() {
   if (isKmLocked(data)) { toast('Záznam km je uzavřen'); return; }
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
-  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus skončil.'); return; }
+  if (!isChildTurnusActive(child, data)) { toast('Tvůj turnus je uzav\u0159en.'); return; }
   const rec = getTodayRecord(child);
   const val = parseFloat(document.getElementById('km-slider').value);
   rec.km = val;
