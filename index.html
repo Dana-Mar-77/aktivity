@@ -1773,14 +1773,20 @@ function getChildTurnus(child, data) {
 
 function isChildTurnusActive(child, data) {
   const t = getChildTurnus(child, data);
-  return t ? t.status === 'active' : false;
+  if (!t) return false;
+  if (t.status !== 'active') return false;
+  // Auto-freeze on the last day of turnus or after (even if admin hasn't archived yet)
+  const today = getToday();
+  if (today >= t.end) return false;
+  return true;
 }
 
 function isChildProgramActive(child, data) {
   const t = getChildTurnus(child, data);
   if (!t || t.status !== 'active') return false;
   const today = getToday();
-  return today >= t.start && today <= t.end;
+  if (today >= t.end) return false;
+  return today >= t.start && today < t.end;
 }
 
 function getTurnusForDate(data, date) {
