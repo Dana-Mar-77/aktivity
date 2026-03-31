@@ -1815,11 +1815,19 @@ function renderKm() {
     const t = getChildTurnus(child, data);
     const tLabel = t ? t.label : 'Tvůj turnus';
     document.getElementById('km-lock-msg').style.display = 'block';
-    document.getElementById('km-lock-msg').innerHTML = esc(tLabel) + ' je uzav\u0159en.<br><small style="font-weight:400">Kilometry m\u016f\u017ee\u0161 zapisovat jen b\u011bhem sv\u00e9ho turnusu.</small>' +
-      '<div style="margin-top:14px;padding:12px;background:linear-gradient(180deg,#E3F2FD 0%,#C8E6C9 100%);border-radius:8px;text-align:center">' +
-      '<div style="font-size:.95rem;color:#555;line-height:1.5">Ka\u017ed\u00fd krok se po\u010d\u00edt\u00e1, i\u00a0bez aplikace! \ud83d\udcaa</div></div>';
+    document.getElementById('km-lock-msg').innerHTML = esc(tLabel) + ' je uzav\u0159en.<br><small style="font-weight:400">Kilometry m\u016f\u017ee\u0161 zapisovat jen b\u011bhem sv\u00e9ho turnusu.</small>';
     document.getElementById('km-controls').style.display = 'none';
     document.getElementById('km-slider').disabled = true;
+    // Motivational box below the warning
+    var kmMotiv = document.getElementById('km-turnus-motiv');
+    if (!kmMotiv) {
+      kmMotiv = document.createElement('div');
+      kmMotiv.id = 'km-turnus-motiv';
+      document.getElementById('km-lock-msg').parentNode.appendChild(kmMotiv);
+    }
+    kmMotiv.style.display = '';
+    kmMotiv.innerHTML = '<div style="margin-top:16px;padding:16px 12px;background:linear-gradient(180deg,#E3F2FD 0%,#C8E6C9 100%);border-radius:var(--radius-sm);text-align:center">' +
+      '<div style="font-size:.95rem;color:#555;line-height:1.5">Ka\u017ed\u00fd krok se po\u010d\u00edt\u00e1, i\u00a0bez aplikace! \ud83d\udcaa</div></div>';
     return;
   }
   if (!isChildProgramActive(child, data)) {
@@ -1834,6 +1842,8 @@ function renderKm() {
     document.getElementById('km-slider').disabled = true;
     return;
   }
+  var kmMotivEl = document.getElementById('km-turnus-motiv');
+  if (kmMotivEl) kmMotivEl.style.display = 'none';
   const rec = getTodayRecord(child);
   const locked = isKmLocked(data);
   document.getElementById('km-today-saved').textContent = rec.km || 0;
