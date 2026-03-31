@@ -1220,49 +1220,57 @@ function renderHost() {
   const data = loadData();
   const container = document.getElementById('host-content');
   const range = getAllTurnusDateRange(data);
-  const pStart = range.start;
-  const pEnd = range.end;
-  const days = getDaysBetween(pStart, pEnd);
   const today = getToday();
   const turnusList = data.settings.turnusList || [];
 
-  if (hostDate < pStart || hostDate > pEnd) hostDate = today >= pStart && today <= pEnd ? today : pStart;
+  if (hostDate < range.start || hostDate > range.end) hostDate = today >= range.start && today <= range.end ? today : range.start;
+
+  // Sort turnuses: active first, then archived (reversed so newest archived first)
+  const activeTurnuses = turnusList.filter(t => t.status === 'active');
+  const archivedTurnuses = [...turnusList.filter(t => t.status !== 'active')].reverse();
+  const orderedTurnuses = activeTurnuses.concat(archivedTurnuses);
 
   let html = '';
 
-  // Calendar grid
+  // Calendar grid — one section per turnus
   html += '<div class="card">';
   html += '<div class="program-info-row">Vybráno: <strong>' + formatDateShort(hostDate) + '</strong></div>';
-  let lastTurnusId = '';
-  html += '<div class="day-selector-grid">';
-  days.forEach(d => {
-    // Turnus separator label
-    const dayTurnus = turnusList.find(t => d >= t.start && d <= t.end);
-    if (dayTurnus && dayTurnus.id !== lastTurnusId) {
-      lastTurnusId = dayTurnus.id;
-      html += '<div style="grid-column:1/-1;font-size:.75rem;font-weight:700;color:var(--blue);padding:6px 0 2px">' + esc(dayTurnus.label) + '</div>';
-    }
-    const summary = getDaySummary(data, d);
-    const dayNum = parseInt(d.split('-')[2], 10);
-    const abbr = getDayAbbr(d);
-    const dow = new Date(d + 'T00:00:00').getDay();
-    const isWeekend = dow === 0 || dow === 6;
-    const isSelected = d === hostDate;
-    const isToday = d === today;
-    let cls = 'day-tile';
-    if (isSelected) cls += ' selected';
-    if (summary.hasSchedule) cls += ' has-schedule';
-    if (isWeekend) cls += ' weekend';
-    if (isToday) cls += ' today-marker';
-    html += '<div class="' + cls + '" onclick="hostSelectDate(\'' + d + '\')">';
-    html += '<span class="day-num">' + dayNum + '</span>';
-    html += '<span class="day-abbr">' + abbr + '</span>';
-    if (summary.activityCount > 0) {
-      html += '<span class="day-act-count">' + summary.activityCount + ' akt.</span>';
-    }
+
+  orderedTurnuses.forEach(turnus => {
+    const isArchived = turnus.status !== 'active';
+    const days = getDaysBetween(turnus.start, turnus.end);
+    const startF = turnus.start.split('-').reverse().join('.');
+    const endF = turnus.end.split('-').reverse().join('.');
+    const labelStyle = isArchived ? 'font-size:.7rem;font-weight:600;color:var(--gray);padding:10px 0 2px' : 'font-size:.75rem;font-weight:700;color:var(--blue);padding:6px 0 2px';
+    const tileScale = isArchived ? 'transform:scale(0.82);margin:-2px' : '';
+
+    html += '<div style="' + labelStyle + '">' + esc(turnus.label) + ' (' + startF + ' – ' + endF + ')' + (isArchived ? ' <span style="font-size:.6rem;color:var(--orange)">(ukončený)</span>' : '') + '</div>';
+    html += '<div class="day-selector-grid">';
+    days.forEach(d => {
+      const summary = getDaySummary(data, d);
+      const dayNum = parseInt(d.split('-')[2], 10);
+      const abbr = getDayAbbr(d);
+      const dow = new Date(d + 'T00:00:00').getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const isSelected = d === hostDate;
+      const isToday = d === today;
+      let cls = 'day-tile';
+      if (isSelected) cls += ' selected';
+      if (summary.hasSchedule) cls += ' has-schedule';
+      if (isWeekend) cls += ' weekend';
+      if (isToday) cls += ' today-marker';
+      html += '<div class="' + cls + '" style="' + tileScale + (isArchived ? ';opacity:.75' : '') + '" onclick="hostSelectDate(\'' + d + '\')">';
+      html += '<span class="day-num">' + dayNum + '</span>';
+      html += '<span class="day-abbr">' + abbr + '</span>';
+      if (summary.activityCount > 0) {
+        html += '<span class="day-act-count">' + summary.activityCount + ' akt.</span>';
+      }
+      html += '</div>';
+    });
     html += '</div>';
   });
-  html += '</div></div>';
+
+  html += '</div>';
 
   // Day detail
   const sched = data.schedule[hostDate];
@@ -2200,8 +2208,10 @@ function renderAdminSchedule() {
         }
         html += '</div>';
       });
-      // Unsigned children
-      const unsigned = data.children.filter(c => !signedUpIds.has(c.id));
+      // Unsigned children (only from turnus covering this date)
+      const schedDateTurnus = getTurnusForDate(data, scheduleDate);
+      const schedRelevant = schedDateTurnus ? data.children.filter(c => c.turnus === schedDateTurnus.id) : data.children;
+      const unsigned = schedRelevant.filter(c => !signedUpIds.has(c.id));
       if (unsigned.length > 0) {
         html += '<div style="margin-top:12px"><h3 style="color:var(--red);margin-bottom:8px">Bez aktivity (' + unsigned.length + ')</h3>';
         html += '<div class="overview-unsigned">';
