@@ -311,7 +311,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
   <!-- ACTIVITIES -->
   <div id="screen-activities" class="screen">
-    <div class="card"><h2>Záznam aktivit</h2><div id="activity-info"></div></div>
+    <div class="card"><h2>Přihlášení na aktivity</h2><div id="activity-info"></div></div>
     <div id="activity-slots-container"></div>
   </div>
 
@@ -1679,7 +1679,7 @@ function renderActivities() {
     const msg = t && td < t.start
       ? 'Program začíná ' + formatDate(t.start)
       : 'Program skončil ' + formatDate(t ? t.end : data.settings.programEnd);
-    infoEl.innerHTML = '<div class="warning-box">' + msg + '<br><small style="font-weight:400">Záznam aktivit je dostupný jen během programu.</small></div>';
+    infoEl.innerHTML = '<div class="warning-box">' + msg + '<br><small style="font-weight:400">P\u0159ihla\u0161ov\u00e1n\u00ed na aktivity je dostupn\u00e9 jen b\u011bhem programu.</small></div>';
     container.innerHTML = '';
     return;
   }
