@@ -1071,14 +1071,28 @@ function hideAdminLogin() { document.getElementById('admin-login').style.display
 
 function previewPhoto(input) {
   if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
   const reader = new FileReader();
   reader.onload = function(e) {
-    regPhotoData = e.target.result;
-    regSelectedAvatar = null;
-    document.getElementById('reg-avatar-preview').innerHTML = '<img src="' + regPhotoData + '" alt="foto">';
-    renderSeaAvatarGrid('reg-sea-avatars', null);
+    // Compress photo to max 200x200 JPEG to save space
+    const img = new Image();
+    img.onload = function() {
+      const maxSize = 200;
+      let w = img.width, h = img.height;
+      if (w > h) { if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; } }
+      else { if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; } }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      regPhotoData = canvas.toDataURL('image/jpeg', 0.7);
+      regSelectedAvatar = null;
+      document.getElementById('reg-avatar-preview').innerHTML = '<img src="' + regPhotoData + '" alt="foto">';
+      renderSeaAvatarGrid('reg-sea-avatars', null);
+    };
+    img.onerror = function() { toast('Fotku se nepoda\u0159ilo na\u010d\u00edst.'); };
+    img.src = e.target.result;
   };
-  reader.readAsDataURL(input.files[0]);
+  reader.readAsDataURL(file);
 }
 
 function registerChild() {
@@ -1099,7 +1113,12 @@ function registerChild() {
   const regTurnus = getTurnusForToday(data);
   if (!regTurnus) { toast('Žádný otevřený turnus — registrace není možná.'); return; }
   const duplicate = data.children.find(c => c.name.toLowerCase() === name.toLowerCase());
-  if (duplicate) { toast('Toto jméno už bylo použito. Zkus třeba ' + name + ' K. nebo jiný tvar.'); return; }
+  if (duplicate) {
+    const dupTurnus = getChildTurnus(duplicate, data);
+    const turnusInfo = dupTurnus && dupTurnus.id !== (regTurnus && regTurnus.id) ? ' (v ' + dupTurnus.label + ')' : '';
+    toast('Jm\u00e9no "' + name + '" u\u017e pou\u017e\u00edv\u00e1 jin\u00e9 d\u00edt\u011b' + turnusInfo + '. Zkus t\u0159eba ' + name + ' K. nebo p\u0159ezd\u00edvku.');
+    return;
+  }
   const id = genId();
   data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, avatar: regSelectedAvatar || null, records: {}, turnus: regTurnus.id, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   saveData(data);
