@@ -624,9 +624,29 @@ function loadData() {
 function saveData(data) {
   data._localVersion = (data._localVersion || 0) + 1;
   if (isAdmin) data._adminDataUpdatedAt = Date.now();
-  _cache = data;
-  localStorage.setItem('kretin_v2', JSON.stringify(data));
-  pushToSupabase(data);
+  var saved = false;
+  try {
+    localStorage.setItem('kretin_v2', JSON.stringify(data));
+    saved = true;
+  } catch (e) {
+    // localStorage full — remove photos to free space and retry
+    console.warn('localStorage full, removing photos to free space');
+    if (data.children) data.children.forEach(function(c) { c.photo = null; });
+    try {
+      localStorage.setItem('kretin_v2', JSON.stringify(data));
+      saved = true;
+    } catch (e2) {
+      console.error('localStorage save failed even without photos:', e2);
+      toast('Nepoda\u0159ilo se ulo\u017eit data \u2014 pam\u011b\u0165 za\u0159\u00edzen\u00ed je pln\u00e1.');
+    }
+  }
+  if (saved) {
+    _cache = data;
+    pushToSupabase(data);
+  } else {
+    // Rollback cache to what's actually in localStorage
+    try { _cache = JSON.parse(localStorage.getItem('kretin_v2')); } catch(e) { /* keep old cache */ }
+  }
 }
 
 async function pushToSupabase(data) {
