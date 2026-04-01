@@ -1649,7 +1649,12 @@ function renderActivities() {
   const child = data.children.find(c => c.id === currentChildId);
   if (!child) return;
   const today = getToday();
-  const scheduledDates = getScheduledDates(data);
+  const childTurnusObj = getChildTurnus(child, data);
+  let scheduledDates = getScheduledDates(data);
+  // Filter to child's turnus date range
+  if (childTurnusObj) {
+    scheduledDates = scheduledDates.filter(d => d >= childTurnusObj.start && d <= childTurnusObj.end);
+  }
   const infoEl = document.getElementById('activity-info');
   const container = document.getElementById('activity-slots-container');
 
