@@ -647,6 +647,7 @@ function saveData(data) {
     // Rollback cache to what's actually in localStorage
     try { _cache = JSON.parse(localStorage.getItem('kretin_v2')); } catch(e) { /* keep old cache */ }
   }
+  return saved;
 }
 
 async function pushToSupabase(data) {
@@ -1152,7 +1153,12 @@ function registerChild() {
   }
   const id = genId();
   data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, avatar: regSelectedAvatar || null, records: {}, turnus: regTurnus.id, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
-  saveData(data);
+  if (!saveData(data)) {
+    // Save failed — remove the child we just added so it doesn't block future attempts
+    data.children = data.children.filter(c => c.id !== id);
+    toast('Registrace se nepoda\u0159ila \u2014 zkus to znovu bez fotky.');
+    return;
+  }
   regPhotoData = null;
   regSelectedAvatar = null;
   document.getElementById('reg-name').value = '';
