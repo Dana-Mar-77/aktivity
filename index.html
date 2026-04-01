@@ -2784,7 +2784,7 @@ function renderAdminChildren() {
   if (adminChildFilter !== 'all') children = children.filter(c => c.group === adminChildFilter);
   if (adminSubFilter !== 'all') children = children.filter(c => c.subgroup === adminSubFilter);
 
-  let html = '<div class="card"><div class="flex-between mb-8"><h2 style="margin-bottom:0">Děti (' + data.children.length + ')</h2><button class="btn btn-sm btn-green" onclick="showAdminAddChild()">+ Přidat</button></div>';
+  let html = '<div class="card"><div class="flex-between mb-8"><h2 style="margin-bottom:0">Děti (' + children.length + ')</h2><button class="btn btn-sm btn-green" onclick="showAdminAddChild()">+ Přidat</button></div>';
 
   // Turnus filter bar
   if (turnusList.length > 1) {
