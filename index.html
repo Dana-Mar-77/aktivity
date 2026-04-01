@@ -1154,9 +1154,16 @@ function registerChild() {
   const id = genId();
   data.children.push({ id, name, gender, age, group, subgroup, pin, photo: regPhotoData || null, avatar: regSelectedAvatar || null, records: {}, turnus: regTurnus.id, _registeredAt: Date.now(), _profileUpdatedAt: Date.now() });
   if (!saveData(data)) {
-    // Save failed — remove the child we just added so it doesn't block future attempts
+    // Save failed — likely photo too large. Try again without photo.
     data.children = data.children.filter(c => c.id !== id);
-    toast('Registrace se nepoda\u0159ila \u2014 zkus to znovu bez fotky.');
+    if (regPhotoData) {
+      toast('Fotka je p\u0159\u00edli\u0161 velk\u00e1. Zkus registraci bez fotky nebo vyber avatara.');
+      regPhotoData = null;
+      document.getElementById('reg-photo').value = '';
+      document.getElementById('reg-avatar-preview').innerHTML = '\ud83d\udcf7';
+    } else {
+      toast('Registrace se nepoda\u0159ila \u2014 pam\u011b\u0165 za\u0159\u00edzen\u00ed je pln\u00e1.');
+    }
     return;
   }
   regPhotoData = null;
