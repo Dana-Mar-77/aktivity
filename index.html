@@ -9,7 +9,7 @@
 <title>Pohybové aktivity v2 — Dětská léčebna Křetín</title>
 <script>
 // Force reload if running old or cached code
-var KRETIN_CODE_VERSION = 6;
+var KRETIN_CODE_VERSION = 7;
 var lastCodeVer = parseInt(localStorage.getItem('kretin_code_ver') || '0');
 var reloadAttempts = parseInt(sessionStorage.getItem('kretin_reload') || '0');
 if (lastCodeVer !== KRETIN_CODE_VERSION && lastCodeVer > 0 && reloadAttempts < 2) {
@@ -637,7 +637,18 @@ async function pushToSupabase(data) {
   }
   _syncing = true;
   try {
-    await sb.from('app_state').upsert({ id: 1, data: data, updated_at: new Date().toISOString() });
+    // Fetch current remote, merge, then push — prevents overwriting other devices' changes
+    const { data: row } = await sb.from('app_state').select('data').eq('id', 1).single();
+    let toPush = data;
+    if (row && row.data) {
+      const remote = migrateData(JSON.parse(JSON.stringify(row.data)));
+      const merged = mergeData(data, remote);
+      toPush = merged;
+      // Update local cache with merged result
+      _cache = merged;
+      localStorage.setItem('kretin_v2', JSON.stringify(merged));
+    }
+    await sb.from('app_state').upsert({ id: 1, data: toPush, updated_at: new Date().toISOString() });
   } catch (e) { console.error('Supabase push:', e); }
   _syncing = false;
   // Process queued push if any
