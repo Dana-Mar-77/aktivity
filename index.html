@@ -690,60 +690,58 @@ function saveData(data) {
 }
 
 var _lastSyncOk = true;
+var _pushCounter = 0;
+var _lastPushId = 0;
 async function pushToSupabase(data) {
   if (_syncing) {
-    _pendingPush = JSON.parse(JSON.stringify(data));
+    // Merge into existing pending instead of overwriting (prevents data loss)
+    if (_pendingPush) {
+      _pendingPush = mergeData(data, _pendingPush);
+    } else {
+      _pendingPush = JSON.parse(JSON.stringify(data));
+    }
     return;
   }
   _syncing = true;
-  var maxRetries = 3;
+  var pushId = ++_pushCounter;
   var success = false;
+  var maxRetries = 3;
   for (var attempt = 0; attempt < maxRetries && !success; attempt++) {
     try {
       if (attempt > 0) {
-        // Random jitter 200-800ms to avoid collision with other devices
         await new Promise(r => setTimeout(r, 200 + Math.random() * 600));
       }
       // Fetch current remote, merge, then push
       const { data: row } = await sb.from('app_state').select('data').eq('id', 1).single();
-      let toPush = data;
+      // Also merge with current _cache (might have realtime updates)
+      var localFresh = _cache || data;
+      var merged = data;
       if (row && row.data) {
-        const remote = migrateData(JSON.parse(JSON.stringify(row.data)));
-        toPush = mergeData(data, remote);
-        _cache = toPush;
-        try { localStorage.setItem('kretin_v2', JSON.stringify(toPush)); } catch(e) {}
+        var remote = migrateData(JSON.parse(JSON.stringify(row.data)));
+        merged = mergeData(localFresh, remote);
+        merged = mergeData(data, merged);
       }
-      await sb.from('app_state').upsert({ id: 1, data: toPush, updated_at: new Date().toISOString() });
-      // Verify: re-read and check our data is actually there
-      await new Promise(r => setTimeout(r, 150));
-      const { data: verify } = await sb.from('app_state').select('data').eq('id', 1).single();
-      if (verify && verify.data) {
-        const vMerged = mergeData(data, migrateData(verify.data));
-        // Check if verify data already contains everything from our data
-        if (JSON.stringify(vMerged) === JSON.stringify(migrateData(verify.data))) {
-          success = true; // Our data is in Supabase
-        } else {
-          console.warn('Push verify failed, data differs — retry ' + (attempt + 1));
-          // Push the corrected merge
-          await sb.from('app_state').upsert({ id: 1, data: vMerged, updated_at: new Date().toISOString() });
-          _cache = vMerged;
-          try { localStorage.setItem('kretin_v2', JSON.stringify(vMerged)); } catch(e) {}
-          success = true; // Corrected
-        }
-      } else {
-        success = true; // Can't verify, assume ok
+      await sb.from('app_state').upsert({ id: 1, data: merged, updated_at: new Date().toISOString() });
+      // Update local state with merged result (but don't overwrite if _cache was updated by realtime in the meantime)
+      var currentCacheVersion = _cache ? (_cache._localVersion || 0) : 0;
+      var mergedVersion = merged._localVersion || 0;
+      if (mergedVersion >= currentCacheVersion) {
+        _cache = merged;
+        try { localStorage.setItem('kretin_v2', JSON.stringify(merged)); } catch(e) {}
       }
+      success = true;
     } catch (e) {
       console.error('Supabase push attempt ' + (attempt + 1) + ':', e);
     }
   }
-  _lastSyncOk = success;
-  if (!success) {
-    console.error('Push failed after ' + maxRetries + ' attempts');
+  if (pushId >= _lastPushId) {
+    _lastSyncOk = success;
+    _lastPushId = pushId;
   }
+  if (!success) console.error('Push failed after ' + maxRetries + ' attempts');
   _syncing = false;
   if (_pendingPush) {
-    const pending = _pendingPush;
+    var pending = _pendingPush;
     _pendingPush = null;
     pushToSupabase(pending);
   }
@@ -1887,9 +1885,9 @@ function addActivity(activityId) {
   renderActivities();
   toast('+' + act.points + ' ' + bodyCz(act.points) + ' za ' + act.name + '!');
   // Verify sync after short delay
-  setTimeout(function() {
-    if (!_lastSyncOk) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
-  }, 2000);
+  (function(pid) { setTimeout(function() {
+    if (!_lastSyncOk && _lastPushId <= pid) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
+  }, 4000); })(_pushCounter);
 }
 
 function cancelActivity() {
@@ -1906,9 +1904,9 @@ function cancelActivity() {
   saveData(data);
   renderActivities();
   toast('Zrušeno: ' + name + ' — vyber jinou');
-  setTimeout(function() {
-    if (!_lastSyncOk) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
-  }, 2000);
+  (function(pid) { setTimeout(function() {
+    if (!_lastSyncOk && _lastPushId <= pid) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
+  }, 4000); })(_pushCounter);
 }
 
 // ============ KILOMETERS ============
@@ -2040,9 +2038,9 @@ function saveKm() {
   saveData(data);
   document.getElementById('km-today-saved').textContent = val;
   toast('Uloženo: ' + val + ' km (+' + val + ' ' + bodyCz(val) + ')');
-  setTimeout(function() {
-    if (!_lastSyncOk) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
-  }, 2000);
+  (function(pid) { setTimeout(function() {
+    if (!_lastSyncOk && _lastPushId <= pid) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
+  }, 4000); })(_pushCounter);
 }
 
 // ============ LEADERBOARD ============
@@ -3591,21 +3589,25 @@ function restoreBackup(idx) {
         if (remote.settings.adminPassword && !isHashed(remote.settings.adminPassword)) {
           remote.settings.adminPassword = await hashPassword(remote.settings.adminPassword);
         }
-        // Skip if remote data is identical to local (echo of our own push)
+        // Skip if we're currently pushing (this is likely echo of our own push)
+        if (_syncing) return;
         const local = _cache || loadData();
-        const localJson = JSON.stringify(local);
-        if (localJson === rawRemoteJson) return;
+        // Quick check: same version = likely echo
+        const localVer = local._localVersion || 0;
+        const remoteVer = remote._localVersion || 0;
+        if (remoteVer > 0 && remoteVer === localVer) return;
         // Merge remote data with local — never blindly overwrite
         const merged = mergeData(local, remote);
         const mergedJson = JSON.stringify(merged);
+        const localJson = JSON.stringify(local);
         _cache = merged;
-        localStorage.setItem('kretin_v2', JSON.stringify(merged));
-        // If merge result differs from what's in Supabase, push correction back
-        // Compare against RAW remote (not migrated) so migrateData fixes get pushed back
-        if (mergedJson !== rawRemoteJson) {
+        try { localStorage.setItem('kretin_v2', JSON.stringify(merged)); } catch(e) {}
+        // Only push back if merge produced something different than remote (migration fixes etc.)
+        const migratedRemoteJson = JSON.stringify(remote);
+        if (mergedJson !== migratedRemoteJson && mergedJson !== localJson) {
           pushToSupabase(JSON.parse(mergedJson));
         }
-        // Only refresh screen if data actually changed from our perspective
+        // Refresh screen if data changed from our perspective
         if (mergedJson !== localJson) {
           refreshCurrentScreen();
         }
