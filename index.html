@@ -689,39 +689,58 @@ function saveData(data) {
   return saved;
 }
 
-async function pushToSupabase(data, _retries) {
+var _lastSyncOk = true;
+async function pushToSupabase(data) {
   if (_syncing) {
     _pendingPush = JSON.parse(JSON.stringify(data));
     return;
   }
   _syncing = true;
-  var retries = _retries || 0;
-  try {
-    // Fetch current remote, merge, then push
-    const { data: row } = await sb.from('app_state').select('data,updated_at').eq('id', 1).single();
-    let toPush = data;
-    var remoteUpdatedAt = row && row.updated_at ? row.updated_at : null;
-    if (row && row.data) {
-      const remote = migrateData(JSON.parse(JSON.stringify(row.data)));
-      const merged = mergeData(data, remote);
-      toPush = merged;
-      _cache = merged;
-      try { localStorage.setItem('kretin_v2', JSON.stringify(merged)); } catch(e) {}
-    }
-    var pushTs = new Date().toISOString();
-    await sb.from('app_state').upsert({ id: 1, data: toPush, updated_at: pushTs });
-    // Verify our write wasn't overwritten immediately
-    if (retries < 2) {
-      await new Promise(r => setTimeout(r, 300));
-      const { data: verify } = await sb.from('app_state').select('updated_at').eq('id', 1).single();
-      if (verify && verify.updated_at !== pushTs) {
-        // Someone else wrote after us — re-merge and push again
-        console.warn('Push was overwritten, retrying merge+push (attempt ' + (retries + 1) + ')');
-        _syncing = false;
-        return pushToSupabase(data, retries + 1);
+  var maxRetries = 3;
+  var success = false;
+  for (var attempt = 0; attempt < maxRetries && !success; attempt++) {
+    try {
+      if (attempt > 0) {
+        // Random jitter 200-800ms to avoid collision with other devices
+        await new Promise(r => setTimeout(r, 200 + Math.random() * 600));
       }
+      // Fetch current remote, merge, then push
+      const { data: row } = await sb.from('app_state').select('data').eq('id', 1).single();
+      let toPush = data;
+      if (row && row.data) {
+        const remote = migrateData(JSON.parse(JSON.stringify(row.data)));
+        toPush = mergeData(data, remote);
+        _cache = toPush;
+        try { localStorage.setItem('kretin_v2', JSON.stringify(toPush)); } catch(e) {}
+      }
+      await sb.from('app_state').upsert({ id: 1, data: toPush, updated_at: new Date().toISOString() });
+      // Verify: re-read and check our data is actually there
+      await new Promise(r => setTimeout(r, 150));
+      const { data: verify } = await sb.from('app_state').select('data').eq('id', 1).single();
+      if (verify && verify.data) {
+        const vMerged = mergeData(data, migrateData(verify.data));
+        // Check if verify data already contains everything from our data
+        if (JSON.stringify(vMerged) === JSON.stringify(migrateData(verify.data))) {
+          success = true; // Our data is in Supabase
+        } else {
+          console.warn('Push verify failed, data differs — retry ' + (attempt + 1));
+          // Push the corrected merge
+          await sb.from('app_state').upsert({ id: 1, data: vMerged, updated_at: new Date().toISOString() });
+          _cache = vMerged;
+          try { localStorage.setItem('kretin_v2', JSON.stringify(vMerged)); } catch(e) {}
+          success = true; // Corrected
+        }
+      } else {
+        success = true; // Can't verify, assume ok
+      }
+    } catch (e) {
+      console.error('Supabase push attempt ' + (attempt + 1) + ':', e);
     }
-  } catch (e) { console.error('Supabase push:', e); }
+  }
+  _lastSyncOk = success;
+  if (!success) {
+    console.error('Push failed after ' + maxRetries + ' attempts');
+  }
   _syncing = false;
   if (_pendingPush) {
     const pending = _pendingPush;
@@ -1867,6 +1886,10 @@ function addActivity(activityId) {
   saveData(data);
   renderActivities();
   toast('+' + act.points + ' ' + bodyCz(act.points) + ' za ' + act.name + '!');
+  // Verify sync after short delay
+  setTimeout(function() {
+    if (!_lastSyncOk) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
+  }, 2000);
 }
 
 function cancelActivity() {
@@ -1883,6 +1906,9 @@ function cancelActivity() {
   saveData(data);
   renderActivities();
   toast('Zrušeno: ' + name + ' — vyber jinou');
+  setTimeout(function() {
+    if (!_lastSyncOk) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
+  }, 2000);
 }
 
 // ============ KILOMETERS ============
@@ -2014,6 +2040,9 @@ function saveKm() {
   saveData(data);
   document.getElementById('km-today-saved').textContent = val;
   toast('Uloženo: ' + val + ' km (+' + val + ' ' + bodyCz(val) + ')');
+  setTimeout(function() {
+    if (!_lastSyncOk) toast('\u26a0\ufe0f Zm\u011bna se nemus\u00ed zobrazit na jin\u00fdch za\u0159\u00edzen\u00edch. Zkus obnovit str\u00e1nku.');
+  }, 2000);
 }
 
 // ============ LEADERBOARD ============
