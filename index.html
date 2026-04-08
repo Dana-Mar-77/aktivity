@@ -398,13 +398,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="toast" id="toast"></div>
 <div class="modal-overlay" id="modal-overlay"><div class="modal" id="modal-content"></div></div>
 <script>
-// ============ SUPABASE ============
-const SUPABASE_URL = 'https://fapcodsdlanixidmqaiy.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_qs3liD4kaOecwWIbpAY6Tw_dD10VaC5';
+// ============ SUPABASE (TEST PROJEKT — normalizované tabulky) ============
+const SUPABASE_URL = 'https://zlcuhfaithscwgziepgo.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_P6j9nSXLps0PGxdscYwdPg_QYw56MWu';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let _cache = null;
-let _syncing = false;
-let _pendingPush = null; // queue for next push when _syncing is true
+let _data = null;       // cached legacy-format data
+let _prevData = null;   // snapshot for diff-based saves
 
 // ============ DATA MODEL ============
 const DEFAULT_DATA = {
@@ -498,383 +497,356 @@ function selectSeaAvatar(containerId, key) {
   renderSeaAvatarGrid(containerId, key);
 }
 
-function migrateData(d) {
-  if (!d) return JSON.parse(JSON.stringify(DEFAULT_DATA));
-  if (!d.locations) d.locations = DEFAULT_DATA.locations;
-  if (!d.schedule) d.schedule = {};
-  if (!d.educators) d.educators = [];
-  if (!d.children) d.children = [];
-  if (!d.settings) d.settings = JSON.parse(JSON.stringify(DEFAULT_DATA.settings));
-  if (!d.settings.groups) d.settings.groups = DEFAULT_DATA.settings.groups;
-  if (!d.settings.subgroups) d.settings.subgroups = DEFAULT_DATA.settings.subgroups;
+// ============================================================
+// NORMALIZED DATA LAYER (Supabase tables místo single JSON blob)
+// ============================================================
+// loadData() / saveData() zachovávají původní API pro kompatibilitu
+// se 42 call sites — interně ale překládají na per-table operace.
 
-  // Migrate: educator.activities[] → global activities[] + educator.activityIds[]
-  if (!d.activities) {
-    d.activities = [];
-    const seen = {};
-    d.educators.forEach(edu => {
-      if (edu.activities && Array.isArray(edu.activities)) {
-        const ids = [];
-        edu.activities.forEach(act => {
-          if (!seen[act.name]) {
-            const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-            d.activities.push({ id: id, name: act.name, points: act.points, icon: act.icon || '🏃', locationId: act.locationId || '', maxKids: act.maxKids || 8 });
-            seen[act.name] = id;
-          }
-          ids.push(seen[act.name]);
-        });
-        edu.activityIds = ids;
-        delete edu.activities;
-      }
-    });
-    // Migrate schedule slots: activityName → activityId
-    for (const date in d.schedule) {
-      if (d.schedule[date] && d.schedule[date].slots) {
-        d.schedule[date].slots.forEach(slot => {
-          if (slot.activityName && !slot.activityId) {
-            slot.activityId = seen[slot.activityName] || '';
-            delete slot.activityName;
-          }
-        });
-      }
-    }
-    // Migrate child records: add activityId
-    d.children.forEach(child => {
-      if (!child.records) return;
-      for (const day in child.records) {
-        const r = child.records[day];
-        if (r.activity && r.activity.name && !r.activity.activityId) {
-          r.activity.activityId = seen[r.activity.name] || '';
-        }
-      }
-    });
+// ---------- DB ↔ legacy converters ----------
+function dbChildToLegacy(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    age: row.age,
+    gender: row.gender,
+    group: row.group_name,
+    subgroup: row.subgroup,
+    pin: String(row.pin || ''),
+    avatar: row.avatar,
+    photo: row.photo,
+    turnus: row.turnus,
+    _registeredAt: row.registered_at ? new Date(row.registered_at).getTime() : null,
+    _profileUpdatedAt: row.profile_updated_at ? new Date(row.profile_updated_at).getTime() : null,
+    records: {}
+  };
+}
+function legacyChildToDb(c) {
+  return {
+    id: c.id,
+    name: c.name,
+    age: c.age || null,
+    gender: c.gender || null,
+    group_name: c.group || null,
+    subgroup: c.subgroup || null,
+    pin: String(c.pin || ''),
+    avatar: c.avatar || null,
+    photo: c.photo || null,
+    turnus: c.turnus || null,
+    registered_at: c._registeredAt ? new Date(c._registeredAt).toISOString() : new Date().toISOString(),
+    profile_updated_at: c._profileUpdatedAt ? new Date(c._profileUpdatedAt).toISOString() : new Date().toISOString()
+  };
+}
+function dbRecordToLegacy(row) {
+  const r = { km: row.km || 0 };
+  if (row.activity_id) {
+    r.activity = {
+      activityId: row.activity_id,
+      name: row.activity_name,
+      points: row.activity_points,
+      icon: row.activity_icon,
+      timestamp: row.activity_timestamp
+    };
   }
-  // Ensure all educators use activityIds format
-  d.educators.forEach(edu => {
-    if (!edu.activityIds) {
-      edu.activityIds = [];
-      delete edu.activities;
-    }
-  });
-
-  if (!d.settings.cancelBeforeStartMinutes) d.settings.cancelBeforeStartMinutes = 30;
-  if (d.settings.cancelWindowMinutes) delete d.settings.cancelWindowMinutes;
-  if (!d.settings.programStart) d.settings.programStart = "2026-04-01";
-  if (!d.settings.programEnd) d.settings.programEnd = "2026-04-28";
-
-  // Turnus migration
-  if (!d.settings.turnusList) {
-    d.settings.turnusList = [
-      { id: "2026-03", number: 3, label: "Turnus č. 3", start: "2026-03-03", end: "2026-03-31", status: "archived" },
-      { id: "2026-04", number: 4, label: "Turnus č. 4", start: "2026-04-01", end: "2026-04-28", status: "active" }
-    ];
-    d.settings.programStart = "2026-04-01";
-    d.settings.programEnd = "2026-04-28";
-  }
-  if (d.children) {
-    d.children.forEach(function(c) {
-      if (!c.turnus) c.turnus = "2026-03";
-    });
-  }
-
-  // Fix: remove wrongly-deleted children IDs (one-time cleanup on every device)
-  if (d.deletedChildren) {
-    var wrongIds = ['mmhw8uyolifh','mmhxmaxzyq4i','mmde2vbs9so5','mmde4jjoc3xv','mmde7djripp1'];
-    d.deletedChildren = d.deletedChildren.filter(function(id) { return wrongIds.indexOf(id) === -1; });
-  }
-
-  // Ensure all PINs are strings
-  if (d.children) {
-    d.children.forEach(function(c) { if (c.pin != null) c.pin = String(c.pin); });
-  }
-
-  // Fix stale activityCancelledAt: if activity was signed up AFTER cancellation, remove cancellation
-  if (d.children) {
-    d.children.forEach(function(c) {
-      if (!c.records) return;
-      for (var day in c.records) {
-        var r = c.records[day];
-        if (r.activityCancelledAt && r.activity && r.activity.timestamp > r.activityCancelledAt) {
-          delete r.activityCancelledAt;
-        }
-      }
-    });
-  }
-
-  // Ensure zombie children are in deletedChildren and removed from children
-  var zombieIds = ['mm38b3xqm93r','mm38i14umg49','mm38od20znkj','mm38okgb63e0','mma9sd153n6a','mmaa6b7kd4m8'];
-  if (!d.deletedChildren) d.deletedChildren = [];
-  zombieIds.forEach(function(zid) { if (d.deletedChildren.indexOf(zid) === -1) d.deletedChildren.push(zid); });
-  if (d.children) {
-    d.children = d.children.filter(function(c) { return d.deletedChildren.indexOf(c.id) === -1; });
-  }
-
-  // Compress oversized photos (pre-compression era photos)
-  if (d.children) {
-    d.children.forEach(function(c) {
-      if (c.photo && c.photo.length > 50000) {
-        // Mark for async compression — can't do canvas in sync migrateData
-        c._needsPhotoCompress = true;
-      }
-    });
-  }
-
-  return d;
+  if (row.activity_cancelled_at) r.activityCancelledAt = row.activity_cancelled_at;
+  if (row.km_timestamp) r.kmTimestamp = row.km_timestamp;
+  return r;
+}
+function legacyRecordToDb(childId, date, r) {
+  return {
+    child_id: childId,
+    date: date,
+    activity_id: r.activity ? r.activity.activityId : null,
+    activity_name: r.activity ? r.activity.name : null,
+    activity_points: r.activity ? r.activity.points : null,
+    activity_icon: r.activity ? r.activity.icon : null,
+    activity_timestamp: r.activity ? r.activity.timestamp : null,
+    activity_cancelled_at: r.activityCancelledAt || null,
+    km: r.km || 0,
+    km_timestamp: r.kmTimestamp || null
+  };
+}
+function dbActivityToLegacy(row) {
+  return {
+    id: row.id, name: row.name, icon: row.icon, points: row.points,
+    locationId: row.location_id, maxKids: row.max_kids, minAge: row.min_age
+  };
+}
+function legacyActivityToDb(a) {
+  return {
+    id: a.id, name: a.name, icon: a.icon || null,
+    points: a.points || 10, location_id: a.locationId || null,
+    max_kids: a.maxKids || null, min_age: a.minAge || null
+  };
+}
+function dbTurnusToLegacy(row) {
+  return { id: row.id, number: row.number, label: row.label,
+           start: row.start_date, end: row.end_date, status: row.status };
+}
+function legacyTurnusToDb(t) {
+  return { id: t.id, number: t.number, label: t.label,
+           start_date: t.start, end_date: t.end, status: t.status || 'active' };
 }
 
-// Async photo compression for old oversized photos
-function compressOldPhotos(data) {
-  var toCompress = data.children ? data.children.filter(function(c) { return c._needsPhotoCompress && c.photo; }) : [];
-  if (toCompress.length === 0) return;
-  var done = 0;
-  toCompress.forEach(function(child) {
-    var img = new Image();
-    img.onload = function() {
-      var maxSize = 200;
-      var w = img.width, h = img.height;
-      if (w > h) { if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; } }
-      else { if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; } }
-      var canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      child.photo = canvas.toDataURL('image/jpeg', 0.7);
-      delete child._needsPhotoCompress;
-      child._profileUpdatedAt = Date.now();
-      done++;
-      if (done === toCompress.length) {
-        console.log('Compressed ' + done + ' old photos');
-        saveData(data);
-      }
-    };
-    img.onerror = function() { delete child._needsPhotoCompress; done++; };
-    img.src = child.photo;
+// ---------- INIT: load all tables, build legacy structure ----------
+async function initData() {
+  const [
+    settingsResp, turnusyResp, locationsResp, activitiesResp,
+    educatorsResp, eaResp, scheduleResp, childrenResp, recordsResp
+  ] = await Promise.all([
+    sb.from('settings').select('*').eq('id', 1).maybeSingle(),
+    sb.from('turnusy').select('*').order('number'),
+    sb.from('locations').select('*'),
+    sb.from('activities').select('*'),
+    sb.from('educators').select('*').order('name'),
+    sb.from('educator_activities').select('*'),
+    sb.from('schedule').select('*'),
+    sb.from('children').select('*'),
+    sb.from('child_records').select('*'),
+  ]);
+
+  if (settingsResp.error) console.error('settings:', settingsResp.error);
+  if (childrenResp.error) console.error('children:', childrenResp.error);
+
+  const s = settingsResp.data || {};
+  const data = {
+    settings: {
+      adminPassword: s.admin_password || 'kretin2026',
+      kmCutoffHour: s.km_cutoff_hour || 21,
+      cancelBeforeStartMinutes: s.cancel_before_start_minutes || 30,
+      groups: s.groups || DEFAULT_DATA.settings.groups,
+      subgroups: s.subgroups || DEFAULT_DATA.settings.subgroups,
+      programStart: s.program_start || DEFAULT_DATA.settings.programStart,
+      programEnd: s.program_end || DEFAULT_DATA.settings.programEnd,
+      turnusList: (turnusyResp.data || []).map(dbTurnusToLegacy)
+    },
+    locations: (locationsResp.data || []).map(r => ({ id: r.id, name: r.name, icon: r.icon })),
+    activities: (activitiesResp.data || []).map(dbActivityToLegacy),
+    educators: (educatorsResp.data || []).map(r => ({ id: r.id, name: r.name, activityIds: [] })),
+    schedule: {},
+    children: [],
+    deletedChildren: []
+  };
+
+  // Educator-activity join
+  const eaByEdu = {};
+  (eaResp.data || []).forEach(row => {
+    if (!eaByEdu[row.educator_id]) eaByEdu[row.educator_id] = [];
+    eaByEdu[row.educator_id].push(row.activity_id);
   });
+  data.educators.forEach(e => { e.activityIds = eaByEdu[e.id] || []; });
+
+  // Schedule (legacy: keyed by date)
+  (scheduleResp.data || []).forEach(row => {
+    data.schedule[row.date] = {
+      timeSlot: row.time_slot,
+      checkedEducators: row.checked_educators || [],
+      slots: row.slots || []
+    };
+  });
+
+  // Children (split active vs deleted)
+  const childMap = {};
+  (childrenResp.data || []).forEach(row => {
+    if (row.deleted_at) {
+      data.deletedChildren.push(row.id);
+    } else {
+      const c = dbChildToLegacy(row);
+      data.children.push(c);
+      childMap[c.id] = c;
+    }
+  });
+
+  // Records (assign to children)
+  (recordsResp.data || []).forEach(row => {
+    const c = childMap[row.child_id];
+    if (c) c.records[row.date] = dbRecordToLegacy(row);
+  });
+
+  _data = data;
+  _prevData = JSON.parse(JSON.stringify(data));
+  return data;
 }
 
 function loadData() {
-  if (_cache) return _cache;
-  try {
-    const d = JSON.parse(localStorage.getItem('kretin_v2'));
-    _cache = migrateData(d);
-    return _cache;
-  } catch { return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+  return _data || JSON.parse(JSON.stringify(DEFAULT_DATA));
 }
 
+// ---------- DIFF-BASED SAVE ----------
 function saveData(data) {
-  data._localVersion = (data._localVersion || 0) + 1;
-  if (isAdmin) data._adminDataUpdatedAt = Date.now();
-  var saved = false;
-  try {
-    localStorage.setItem('kretin_v2', JSON.stringify(data));
-    saved = true;
-  } catch (e) {
-    // localStorage full — remove photos to free space and retry
-    console.warn('localStorage full, removing photos to free space');
-    if (data.children) data.children.forEach(function(c) { c.photo = null; });
-    try {
-      localStorage.setItem('kretin_v2', JSON.stringify(data));
-      saved = true;
-    } catch (e2) {
-      console.error('localStorage save failed even without photos:', e2);
-      toast('Nepoda\u0159ilo se ulo\u017eit data \u2014 pam\u011b\u0165 za\u0159\u00edzen\u00ed je pln\u00e1.');
+  // Update cache synchronously so legacy callers see new state immediately
+  _data = data;
+  // Async dispatch (fire-and-forget)
+  dispatchSave(data).catch(e => console.error('Save dispatch error:', e));
+  return true;
+}
+
+async function dispatchSave(data) {
+  if (!_prevData) _prevData = JSON.parse(JSON.stringify(DEFAULT_DATA));
+  const prev = _prevData;
+  const tasks = [];
+
+  // SETTINGS (single row)
+  const settingsKeys = ['adminPassword','kmCutoffHour','cancelBeforeStartMinutes','groups','subgroups','programStart','programEnd'];
+  const settingsChanged = settingsKeys.some(k => JSON.stringify(prev.settings?.[k]) !== JSON.stringify(data.settings?.[k]));
+  if (settingsChanged) {
+    tasks.push(sb.from('settings').upsert({
+      id: 1,
+      admin_password: data.settings.adminPassword,
+      km_cutoff_hour: data.settings.kmCutoffHour,
+      cancel_before_start_minutes: data.settings.cancelBeforeStartMinutes,
+      groups: data.settings.groups,
+      subgroups: data.settings.subgroups,
+      program_start: data.settings.programStart,
+      program_end: data.settings.programEnd,
+      updated_at: new Date().toISOString()
+    }));
+  }
+
+  // TURNUSY
+  if (JSON.stringify(prev.settings?.turnusList) !== JSON.stringify(data.settings?.turnusList)) {
+    const cur = data.settings.turnusList || [];
+    const prv = prev.settings?.turnusList || [];
+    const curIds = new Set(cur.map(t => t.id));
+    const prvIds = new Set(prv.map(t => t.id));
+    // Upsert all current
+    if (cur.length) tasks.push(sb.from('turnusy').upsert(cur.map(legacyTurnusToDb)));
+    // Delete removed
+    for (const id of prvIds) if (!curIds.has(id)) tasks.push(sb.from('turnusy').delete().eq('id', id));
+  }
+
+  // LOCATIONS
+  if (JSON.stringify(prev.locations) !== JSON.stringify(data.locations)) {
+    const cur = data.locations || [];
+    const curIds = new Set(cur.map(l => l.id));
+    if (cur.length) tasks.push(sb.from('locations').upsert(cur.map(l => ({ id: l.id, name: l.name, icon: l.icon || null }))));
+    for (const l of (prev.locations || [])) if (!curIds.has(l.id)) tasks.push(sb.from('locations').delete().eq('id', l.id));
+  }
+
+  // ACTIVITIES
+  if (JSON.stringify(prev.activities) !== JSON.stringify(data.activities)) {
+    const cur = data.activities || [];
+    const curIds = new Set(cur.map(a => a.id));
+    if (cur.length) tasks.push(sb.from('activities').upsert(cur.map(legacyActivityToDb)));
+    for (const a of (prev.activities || [])) if (!curIds.has(a.id)) tasks.push(sb.from('activities').delete().eq('id', a.id));
+  }
+
+  // EDUCATORS + educator_activities
+  const educatorsChanged = JSON.stringify(prev.educators) !== JSON.stringify(data.educators);
+  if (educatorsChanged) {
+    const cur = data.educators || [];
+    const curIds = new Set(cur.map(e => e.id));
+    // Upsert educators (just name)
+    if (cur.length) tasks.push(sb.from('educators').upsert(cur.map(e => ({ id: e.id, name: e.name }))));
+    // Delete removed educators
+    for (const e of (prev.educators || [])) if (!curIds.has(e.id)) tasks.push(sb.from('educators').delete().eq('id', e.id));
+    // Diff educator_activities per-educator
+    for (const e of cur) {
+      const prevEdu = (prev.educators || []).find(p => p.id === e.id);
+      const prevAids = new Set((prevEdu?.activityIds) || []);
+      const curAids = new Set(e.activityIds || []);
+      // Insert new
+      const toAdd = [...curAids].filter(a => !prevAids.has(a)).map(aid => ({ educator_id: e.id, activity_id: aid }));
+      if (toAdd.length) tasks.push(sb.from('educator_activities').insert(toAdd));
+      // Delete removed
+      for (const aid of prevAids) if (!curAids.has(aid)) {
+        tasks.push(sb.from('educator_activities').delete().eq('educator_id', e.id).eq('activity_id', aid));
+      }
     }
   }
-  if (saved) {
-    _cache = data;
-    pushToSupabase(data);
-  } else {
-    // Rollback cache to what's actually in localStorage
-    try { _cache = JSON.parse(localStorage.getItem('kretin_v2')); } catch(e) { /* keep old cache */ }
+
+  // SCHEDULE (per day)
+  const allDates = new Set([...Object.keys(prev.schedule || {}), ...Object.keys(data.schedule || {})]);
+  for (const date of allDates) {
+    const prevDay = prev.schedule?.[date];
+    const curDay = data.schedule?.[date];
+    if (JSON.stringify(prevDay) === JSON.stringify(curDay)) continue;
+    if (!curDay) {
+      tasks.push(sb.from('schedule').delete().eq('date', date));
+    } else {
+      tasks.push(sb.from('schedule').upsert({
+        date: date,
+        time_slot: curDay.timeSlot || null,
+        checked_educators: curDay.checkedEducators || [],
+        slots: curDay.slots || []
+      }));
+    }
   }
-  return saved;
+
+  // CHILDREN (profile + records)
+  const allChildIds = new Set([
+    ...(prev.children || []).map(c => c.id),
+    ...(data.children || []).map(c => c.id)
+  ]);
+  for (const id of allChildIds) {
+    const prevChild = (prev.children || []).find(c => c.id === id);
+    const curChild = (data.children || []).find(c => c.id === id);
+    if (!curChild) continue; // deletion handled below via deletedChildren
+    if (!prevChild) {
+      // New child — insert
+      tasks.push(sb.from('children').upsert(legacyChildToDb(curChild)));
+      // Records too
+      for (const date in (curChild.records || {})) {
+        tasks.push(sb.from('child_records').upsert(legacyRecordToDb(id, date, curChild.records[date])));
+      }
+      continue;
+    }
+    // Profile diff
+    const profileFields = ['name','age','gender','group','subgroup','pin','avatar','photo','turnus','_profileUpdatedAt'];
+    const profileChanged = profileFields.some(f => JSON.stringify(prevChild[f]) !== JSON.stringify(curChild[f]));
+    if (profileChanged) {
+      tasks.push(sb.from('children').upsert(legacyChildToDb(curChild)));
+    }
+    // Records diff
+    const allDates = new Set([...Object.keys(prevChild.records || {}), ...Object.keys(curChild.records || {})]);
+    for (const date of allDates) {
+      const prevRec = prevChild.records?.[date];
+      const curRec = curChild.records?.[date];
+      if (JSON.stringify(prevRec) === JSON.stringify(curRec)) continue;
+      if (!curRec) {
+        tasks.push(sb.from('child_records').delete().eq('child_id', id).eq('date', date));
+      } else {
+        tasks.push(sb.from('child_records').upsert(legacyRecordToDb(id, date, curRec)));
+      }
+    }
+  }
+
+  // DELETED CHILDREN
+  const prevDel = new Set(prev.deletedChildren || []);
+  const curDel = new Set(data.deletedChildren || []);
+  for (const id of curDel) {
+    if (!prevDel.has(id)) {
+      tasks.push(sb.from('children').update({ deleted_at: new Date().toISOString() }).eq('id', id));
+    }
+  }
+  for (const id of prevDel) {
+    if (!curDel.has(id)) {
+      tasks.push(sb.from('children').update({ deleted_at: null }).eq('id', id));
+    }
+  }
+
+  // Wait for all
+  if (tasks.length) {
+    const results = await Promise.allSettled(tasks);
+    const failed = results.filter(r => r.status === 'rejected' || (r.value && r.value.error));
+    if (failed.length) {
+      console.error('Save errors:', failed.map(r => r.reason || r.value?.error));
+    }
+  }
+
+  // Update snapshot
+  _prevData = JSON.parse(JSON.stringify(data));
 }
 
+// Legacy stubs (no longer needed but referenced elsewhere)
+function migrateData(d) { return d || JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+function compressOldPhotos() { /* no-op — fotky se kompresují přímo v registraci */ }
+async function syncFromSupabase() { await initData(); return true; }
+
+// Compatibility flags (still referenced by some toasts)
 var _lastSyncOk = true;
 var _pushCounter = 0;
 var _lastPushId = 0;
-async function pushToSupabase(data) {
-  if (_syncing) {
-    // Merge into existing pending instead of overwriting (prevents data loss)
-    if (_pendingPush) {
-      _pendingPush = mergeData(data, _pendingPush);
-    } else {
-      _pendingPush = JSON.parse(JSON.stringify(data));
-    }
-    return;
-  }
-  _syncing = true;
-  var pushId = ++_pushCounter;
-  var success = false;
-  var maxRetries = 3;
-  for (var attempt = 0; attempt < maxRetries && !success; attempt++) {
-    try {
-      if (attempt > 0) {
-        await new Promise(r => setTimeout(r, 200 + Math.random() * 600));
-      }
-      // Fetch current remote, merge, then push
-      const { data: row } = await sb.from('app_state').select('data').eq('id', 1).single();
-      // Also merge with current _cache (might have realtime updates)
-      var localFresh = _cache || data;
-      var merged = data;
-      if (row && row.data) {
-        var remote = migrateData(JSON.parse(JSON.stringify(row.data)));
-        merged = mergeData(localFresh, remote);
-        merged = mergeData(data, merged);
-      }
-      await sb.from('app_state').upsert({ id: 1, data: merged, updated_at: new Date().toISOString() });
-      // Update local state with merged result (but don't overwrite if _cache was updated by realtime in the meantime)
-      var currentCacheVersion = _cache ? (_cache._localVersion || 0) : 0;
-      var mergedVersion = merged._localVersion || 0;
-      if (mergedVersion >= currentCacheVersion) {
-        _cache = merged;
-        try { localStorage.setItem('kretin_v2', JSON.stringify(merged)); } catch(e) {}
-      }
-      success = true;
-    } catch (e) {
-      console.error('Supabase push attempt ' + (attempt + 1) + ':', e);
-    }
-  }
-  if (pushId >= _lastPushId) {
-    _lastSyncOk = success;
-    _lastPushId = pushId;
-  }
-  if (!success) console.error('Push failed after ' + maxRetries + ' attempts');
-  _syncing = false;
-  if (_pendingPush) {
-    var pending = _pendingPush;
-    _pendingPush = null;
-    pushToSupabase(pending);
-  }
-}
-
-// Deep merge: merge remote data INTO local
-// RULE: merge NEVER deletes data. Only explicit admin/user actions delete.
-function mergeData(local, remote) {
-  if (!local || !local.children || local.children.length === 0) return remote;
-  if (!remote || !remote.children) return local;
-  const merged = JSON.parse(JSON.stringify(remote));
-
-  // Admin data (settings, educators, activities, schedule, locations): use newer version
-  const localAdminTs = local._adminDataUpdatedAt || 0;
-  const remoteAdminTs = remote._adminDataUpdatedAt || 0;
-  if (localAdminTs > remoteAdminTs) {
-    merged.settings = JSON.parse(JSON.stringify(local.settings));
-    merged.educators = JSON.parse(JSON.stringify(local.educators));
-    merged.activities = JSON.parse(JSON.stringify(local.activities));
-    merged.locations = JSON.parse(JSON.stringify(local.locations));
-    merged.schedule = JSON.parse(JSON.stringify(local.schedule));
-    merged._adminDataUpdatedAt = localAdminTs;
-  }
-
-  // deletedChildren: UNION from both sides (once deleted, stays deleted)
-  const allDeleted = [].concat(local.deletedChildren || [], remote.deletedChildren || []);
-  merged.deletedChildren = [...new Set(allDeleted)];
-
-  // Build lookups
-  const remoteMap = {};
-  (merged.children || []).forEach(c => { remoteMap[c.id] = c; });
-
-  // Merge each local child into remote
-  (local.children || []).forEach(localChild => {
-    if (merged.deletedChildren.includes(localChild.id)) return; // admin deleted
-    const remoteChild = remoteMap[localChild.id];
-    if (!remoteChild) {
-      // Local-only child — add to merged
-      merged.children.push(JSON.parse(JSON.stringify(localChild)));
-      return;
-    }
-    // Merge profile: newer wins
-    const localProfileTs = localChild._profileUpdatedAt || 0;
-    const remoteProfileTs = remoteChild._profileUpdatedAt || 0;
-    if (localProfileTs > remoteProfileTs) {
-      remoteChild.name = localChild.name;
-      remoteChild.age = localChild.age;
-      remoteChild.gender = localChild.gender;
-      remoteChild.group = localChild.group;
-      remoteChild.subgroup = localChild.subgroup;
-      remoteChild.pin = String(localChild.pin);
-      remoteChild.avatar = localChild.avatar;
-      if (localChild.turnus) remoteChild.turnus = localChild.turnus;
-      remoteChild._profileUpdatedAt = localProfileTs;
-    }
-    if (localChild.photo && !remoteChild.photo) remoteChild.photo = localChild.photo;
-    if (localChild.avatar && !remoteChild.avatar) remoteChild.avatar = localChild.avatar;
-    if (localChild.turnus && !remoteChild.turnus) remoteChild.turnus = localChild.turnus;
-    // Merge records
-    if (!localChild.records) return;
-    if (!remoteChild.records) remoteChild.records = {};
-    for (const date in localChild.records) {
-      const lr = localChild.records[date];
-      const rr = remoteChild.records[date];
-      if (!rr) { remoteChild.records[date] = JSON.parse(JSON.stringify(lr)); continue; }
-      // --- Activity: newer timestamp wins. When equal or both 0, KEEP data (never null) ---
-      const lCancelled = lr.activityCancelledAt || 0;
-      const rCancelled = rr.activityCancelledAt || 0;
-      const lActTs = lr.activity ? (lr.activity.timestamp || 0) : 0;
-      const rActTs = rr.activity ? (rr.activity.timestamp || 0) : 0;
-      const lLatest = Math.max(lActTs, lCancelled);
-      const rLatest = Math.max(rActTs, rCancelled);
-      if (lLatest > rLatest) {
-        // Local is strictly newer — use local state (even if null = cancelled)
-        rr.activity = lr.activity ? JSON.parse(JSON.stringify(lr.activity)) : null;
-        rr.activityCancelledAt = lr.activityCancelledAt || undefined;
-        if (!rr.activityCancelledAt) delete rr.activityCancelledAt;
-      } else if (lLatest === rLatest) {
-        // Same timestamp or both 0 — prefer whichever side HAS data
-        if (lr.activity && !rr.activity) {
-          rr.activity = JSON.parse(JSON.stringify(lr.activity));
-          delete rr.activityCancelledAt;
-        }
-      }
-      // If rLatest > lLatest: remote already in merged, nothing to do
-      // --- Km: newer timestamp wins. When equal or both 0, keep HIGHER value ---
-      const lkmt = lr.kmTimestamp || 0;
-      const rkmt = rr.kmTimestamp || 0;
-      if (lkmt > rkmt) { rr.km = lr.km; rr.kmTimestamp = lr.kmTimestamp; }
-      else if (lkmt === rkmt && (lr.km || 0) > (rr.km || 0)) { rr.km = lr.km; if (lr.kmTimestamp) rr.kmTimestamp = lr.kmTimestamp; }
-    }
-  });
-
-  // Remove only admin-deleted children
-  merged.children = merged.children.filter(c => !merged.deletedChildren.includes(c.id));
-
-  // SAFETY: merged must never have fewer non-deleted children than the larger input
-  const localAlive = (local.children || []).filter(c => !merged.deletedChildren.includes(c.id));
-  const remoteAlive = (remote.children || []).filter(c => !merged.deletedChildren.includes(c.id));
-  const expectedMin = Math.max(localAlive.length, remoteAlive.length);
-  if (merged.children.length < expectedMin) {
-    // Something went wrong — add back missing children from the larger set
-    console.warn('MERGE SAFETY: expected ' + expectedMin + ' children but got ' + merged.children.length + '. Recovering...');
-    const mergedIds = new Set(merged.children.map(c => c.id));
-    const source = localAlive.length >= remoteAlive.length ? localAlive : remoteAlive;
-    source.forEach(c => {
-      if (!mergedIds.has(c.id)) merged.children.push(JSON.parse(JSON.stringify(c)));
-    });
-  }
-  return merged;
-}
-
-async function syncFromSupabase() {
-  try {
-    const { data: row, error } = await sb.from('app_state').select('data').eq('id', 1).single();
-    if (error) throw error;
-    if (row && row.data && (row.data.children || row.data.settings)) {
-      const rawRemoteJson = JSON.stringify(row.data);
-      const remote = migrateData(JSON.parse(rawRemoteJson));
-      const local = _cache || (() => { try { return migrateData(JSON.parse(localStorage.getItem('kretin_v2'))); } catch { return null; } })();
-      // Merge instead of overwrite
-      const d = mergeData(local, remote);
-      _cache = d;
-      localStorage.setItem('kretin_v2', JSON.stringify(d));
-      // Push back if migrateData or merge fixed anything
-      if (JSON.stringify(d) !== rawRemoteJson) {
-        pushToSupabase(JSON.parse(JSON.stringify(d)));
-      }
-      return true;
-    }
-  } catch (e) { console.error('Supabase sync:', e); }
-  return false;
-}
 
 function refreshCurrentScreen() {
   const active = document.querySelector('.screen.active');
@@ -3514,106 +3486,45 @@ function restoreBackup(idx) {
 
 // ============ INIT ============
 (async function init() {
-  // Load from localStorage first (fast)
-  if (!localStorage.getItem('kretin_v2')) {
-    _cache = JSON.parse(JSON.stringify(DEFAULT_DATA));
-    localStorage.setItem('kretin_v2', JSON.stringify(_cache));
-  }
-
-  // Sync from Supabase (async) — uses merge, never overwrites local data blindly
-  const synced = await syncFromSupabase();
-  if (synced) {
-    // After merge, push merged result back so Supabase has the complete data
-    const merged = loadData();
-    pushToSupabase(merged);
+  // Load all data from normalized Supabase tables (single async fetch)
+  try {
+    await initData();
     refreshCurrentScreen();
-  } else {
-    // Sync failed — do NOT push local data to Supabase (could overwrite newer remote data)
-    // Just use whatever is in localStorage
-    console.warn('Supabase sync failed, using local data only');
+  } catch (e) {
+    console.error('initData failed:', e);
+    toast('Nepodařilo se načíst data ze serveru');
   }
-
-  // Auto-recovery: if the 5 children are missing, restore from backup
-  (function recoverChildren() {
-    var data = loadData();
-    var criticalIds = ['mmhw8uyolifh','mmhxmaxzyq4i','mmde2vbs9so5','mmde4jjoc3xv','mmde7djripp1'];
-    var childIds = {};
-    data.children.forEach(function(c) { childIds[c.id] = true; });
-    var missingIds = criticalIds.filter(function(id) { return !childIds[id]; });
-    if (missingIds.length === 0) return; // all present, nothing to do
-    // Try to restore from backup
-    try {
-      var backups = JSON.parse(localStorage.getItem('kretin_v2_backup') || '[]');
-      var backup = null;
-      for (var i = 0; i < backups.length; i++) {
-        if (backups[i].date === '2026-03-09') { backup = backups[i]; break; }
-      }
-      if (!backup) return;
-      var restored = 0;
-      backup.data.children.forEach(function(bc) {
-        if (missingIds.indexOf(bc.id) !== -1) {
-          data.children.push(JSON.parse(JSON.stringify(bc)));
-          restored++;
-        }
-      });
-      if (restored > 0) {
-        // Remove their IDs from deletedChildren
-        data.deletedChildren = (data.deletedChildren || []).filter(function(id) {
-          return criticalIds.indexOf(id) === -1;
-        });
-        data._adminDataUpdatedAt = Date.now();
-        _cache = data;
-        localStorage.setItem('kretin_v2', JSON.stringify(data));
-        pushToSupabase(data);
-        console.log('Auto-recovery: restored ' + restored + ' children');
-      }
-    } catch(e) { console.error('Recovery failed:', e); }
-  })();
 
   // Auto backup once per day
   autoBackup();
 
-  // Migrate plain text password to hash (after sync so we hash the final state)
-  const initData = loadData();
-  if (initData.settings.adminPassword && !isHashed(initData.settings.adminPassword)) {
-    initData.settings.adminPassword = await hashPassword(initData.settings.adminPassword);
-    saveData(initData);
+  // Migrate plain text password to hash
+  const d = loadData();
+  if (d.settings.adminPassword && !isHashed(d.settings.adminPassword)) {
+    d.settings.adminPassword = await hashPassword(d.settings.adminPassword);
+    saveData(d);
   }
 
-  // Realtime: when someone else saves, merge with local data (don't overwrite)
-  sb.channel('app_state_sync')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, async payload => {
-      if (payload.new && payload.new.data) {
-        const rawRemoteJson = JSON.stringify(payload.new.data);
-        const remote = migrateData(JSON.parse(rawRemoteJson));
-        if (remote.settings.adminPassword && !isHashed(remote.settings.adminPassword)) {
-          remote.settings.adminPassword = await hashPassword(remote.settings.adminPassword);
-        }
-        // Skip if we're currently pushing (this is likely echo of our own push)
-        if (_syncing) return;
-        const local = _cache || loadData();
-        // Quick check: same version = likely echo
-        const localVer = local._localVersion || 0;
-        const remoteVer = remote._localVersion || 0;
-        if (remoteVer > 0 && remoteVer === localVer) return;
-        // Merge remote data with local — never blindly overwrite
-        const merged = mergeData(local, remote);
-        const mergedJson = JSON.stringify(merged);
-        const localJson = JSON.stringify(local);
-        _cache = merged;
-        try { localStorage.setItem('kretin_v2', JSON.stringify(merged)); } catch(e) {}
-        // Only push back if merge produced something different than remote (migration fixes etc.)
-        const migratedRemoteJson = JSON.stringify(remote);
-        if (mergedJson !== migratedRemoteJson && mergedJson !== localJson) {
-          pushToSupabase(JSON.parse(mergedJson));
-        }
-        // Refresh screen if data changed from our perspective
-        if (mergedJson !== localJson) {
-          refreshCurrentScreen();
-        }
-      }
-    })
-    .subscribe();
+  // Realtime: subscribe to all relevant tables, refetch on any change
+  // (For the test version: simple "refetch all on any change" is enough.
+  // Per-screen subscriptions can come later as optimization.)
+  const tables = ['settings','turnusy','locations','activities','educators','educator_activities','schedule','children','child_records'];
+  let refetchTimer = null;
+  function scheduleRefetch() {
+    if (refetchTimer) return;
+    refetchTimer = setTimeout(async () => {
+      refetchTimer = null;
+      try {
+        await initData();
+        refreshCurrentScreen();
+      } catch(e) { console.error('realtime refetch failed:', e); }
+    }, 200); // debounce burst of changes
+  }
+  const channel = sb.channel('all-tables');
+  tables.forEach(t => {
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: t }, scheduleRefetch);
+  });
+  channel.subscribe();
 
   // Restore previous session (if any)
   restoreSession();
